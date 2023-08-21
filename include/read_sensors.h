@@ -11,26 +11,24 @@
 TwoWire I2CBME = TwoWire(0); // initialize Two Wire instance in setup()
 
 class MyBME280 {
-private:
-    Adafruit_BME280 bme; // I2C
-    //Adafruit_BME280 bme(BME_CS); // hardware SPI
-    //Adafruit_BME280 bme(BME_CS, BME_MOSI, BME_MISO, BME_SCK); // software SPI
+  private:
+    Adafruit_BME280 bme;
+    int sdaPin, sclPin;
 
-public:
-    MyBME280() {}
-    void setup() {
-        Serial.println("Attempting BME280 setup...");
-        I2CBME.begin(I2C_SDA, I2C_SCL, 100000); // pass SDA, SCL, and frequency
+  public:
+    MyBME280(int sda, int scl) : sdaPin(sda), sclPin(scl) {}
 
-        if (!bme.begin(0x76, &I2CBME)) // pass address and I2C instance
-        {
-            Serial.println("Could not find a valid BME280 sensor, check wiring!");
-            while (1);
-        }
-        else
-        {
-            Serial.println("BME280 sensor found!");
-        }
+    bool setup() {
+      Serial.println("Attempting BME280 setup...");
+      I2CBME.begin(sdaPin, sclPin, 100000);
+
+      if (!bme.begin(0x76, &I2CBME)) {
+        Serial.println("Could not find a valid BME280 sensor, check wiring!");
+        return false;  // Indicate failure
+      } else {
+        Serial.println("BME280 sensor found!");
+        return true;  // Indicate success
+      }
     }
 
     float readTemperature() {

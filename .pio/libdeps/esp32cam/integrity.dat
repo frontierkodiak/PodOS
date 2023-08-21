@@ -1,6 +1,8 @@
-adafruit/Adafruit BusIO@^1.14.3
-prampec/IotWebConf @ ^3.2.1
-adafruit/Adafruit BME280 Library@^2.2.2
-rzeldent/micro-moustache@^1.0.1
-plerup/EspSoftwareSerial@^8.1.0
 slashdevin/NeoGPS@^4.2.9
+adafruit/Adafruit BusIO@^1.14.3
+adafruit/Adafruit BME280 Library@^2.2.2
+bblanchon/ArduinoJson@^6.21.3
+prampec/IotWebConf @ ^3.2.1
+rzeldent/micro-moustache@^1.0.1
+espressif/esp32-camera@^2.0.4
+arkhipenko/TaskScheduler@^3.7.0
