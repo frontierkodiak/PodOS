@@ -6,6 +6,7 @@
 #include <IotWebConfTParameter.h>
 #include <OV2640.h>
 #include <ESPmDNS.h>
+#include <esp_sleep.h>
 //#include <rtsp_server.h>
 #include <lookup_camera_config.h>
 #include <lookup_camera_effect.h>
@@ -54,7 +55,7 @@ const int DEFAULT_GPS_PWRDWN_IO_PIN = 16;
 
 // Default bedtime settings
 const int DEFAULT_BEDTIME_MAX_WAIT = 60; // seconds
-
+const int DEFAULT_NAPTIME_BUFFER = 25; // milliseconds
 
 ////// VOLATILE VARIABLES //////
 //// Sensor values
@@ -309,9 +310,33 @@ void handle_restart()
   ESP.restart();
 }
 
+void handle_naptime() {
+    // Check if the client has sent a 'naptime' parameter in the request
+    if (web_server.hasArg("naptime")) {
+        String naptimeValue = web_server.arg("naptime");
+
+        // Convert the received value to an integer
+        int newNaptime = naptimeValue.toInt();
+
+        // Update the global variable if the value is valid (i.e., greater than zero)
+        if (newNaptime > 0) {
+            baseline_naptime = newNaptime;
+
+            // Respond to the client indicating the updated naptime value
+            web_server.send(200, "text/plain", "Naptime updated to " + String(baseline_naptime) + " milliseconds.");
+            return;
+        }
+    }
+
+    // If the parameter was missing or invalid, send an error response
+    web_server.send(400, "text/plain", "Invalid naptime value provided.");
+}
 
 void handle_snapshot()
 {
+  // Start timing the snapshot process
+  uint32_t startTime = millis();
+
   log_v("handle_snapshot");
   if (camera_init_result != ESP_OK)
   {
@@ -336,16 +361,57 @@ void handle_snapshot()
   web_server.setContentLength(fb_len);
   web_server.send(200, "image/jpeg", "");
   web_server.sendContent(fb, fb_len);
+
+  // End timing the snapshot process
+  uint32_t endTime = millis();
+  uint32_t elapsedTime = endTime - startTime;
+
+  // Calculate the naptime based on baseline naptime, elapsed time, and a buffer
+  int sleepDuration = baseline_naptime - elapsedTime - DEFAULT_NAPTIME_BUFFER;  // Subtract 25ms buffer
+
+  // Check that is_reading_GPS and is_reading_sensors are false
+  if (!is_reading_gps && !is_reading_sensors)
+  {
+    // Ensure sleep duration is positive
+    if (sleepDuration > 0)
+    {
+      // Enable timer wakeup for the calculated sleep duration
+      esp_sleep_enable_timer_wakeup(sleepDuration * 1000);  // microseconds
+      esp_light_sleep_start();  // Enter light sleep mode
+    }
+  }
 }
 
 void handle_sensors()
 {
 
-//// Triggers task2 to read sensors and update global variables. ////
-//// 
+  //// Triggers task2 to read sensors and update global variables. ////
+  gps_wakeup_read_requested = false;
+  // Trigger SensorTaskHandle to update sensor values
+  xTaskNotify(SensorTaskHandle, 0, eNoAction); // This sends a notification to SensorTaskHandle to update sensor values
 
+  // Wait for 25ms to give the sensor task some time to update the global values
+  vTaskDelay(pdMS_TO_TICKS(25));  
 
+  // Create a JSON document to package the sensor values
+  DynamicJsonDocument doc(256);
 
+  // Add the sensor values to the JSON document
+  doc["rssi"] = rssi;
+  doc["battery_level"] = battery_level;
+  doc["temperature"] = temperature;
+  doc["humidity"] = humidity;
+  doc["pressure"] = pressure;
+  doc["latitude"] = latitude;
+  doc["longitude"] = longitude;
+  doc["altitude"] = altitude;
+
+  // Serialize the JSON document
+  String jsonOutput;
+  serializeJson(doc, jsonOutput);
+
+  // Send the JSON data using the web_server
+  web_server.send(200, "application/json", jsonOutput);
 }
 
 
@@ -417,6 +483,9 @@ void update_sensor_values(void* parameter) {
         update_battery();
       }
 
+      // Update RSSI
+      update_rssi();
+
       // Check if GPS is present and update
       if (param_gps_present && !gps_wakeup_read_requested) {
         update_gps();
@@ -432,6 +501,11 @@ void update_sensor_values(void* parameter) {
       is_reading_sensors = false;
     }
   }
+}
+
+void update_rssi() {
+    // Connection
+    rssi = WiFi.RSSI();
 }
 
 void update_bme280() {
