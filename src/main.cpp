@@ -119,8 +119,7 @@ MyGPS myGPS;
 MyBME280 myBME280;
 
 // HTML files
-// extern const char index_html_min_start[] asm("_binary_html_index_min_html_start");
-extern const char index_html_start[] asm("_binary_html_index_html_start");
+extern const char index_html_min_start[] asm("_binary_html_index_min_html_start");
 extern const char restart_html_min_start[] asm("_binary_html_restart_min_html_start");
 
 auto param_group_board = iotwebconf::ParameterGroup("board", "Board settings");
@@ -178,10 +177,10 @@ auto param_gps_pwrctl_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int
 // NOTE: /sensors returns current sensor values. /snapshot_readsensors does NOT trigger GPS activation, unless no GPS values exist yet.
 
 auto param_group_bedtime = iotwebconf::ParameterGroup("bedtime", "Bedtime settings");
-auto param_bedtime_max_wait = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bedtime_max_wait").label("Max sensor wait time forcing bedtime(s)").defaultValue(DEFAULT_BEDTIME_MAX_WAIT).min(0).max(300).build();
+auto param_bedtime_max_wait = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bedtime_max_wait").label("Max sensor wait time forcing bedtime(s)").defaultValue(DEFAULT_BEDTIME_MAX_WAIT).min(0).max(3000).build();
 
 auto param_group_naptime = iotwebconf::ParameterGroup("naptime", "Naptime settings");
-auto param_naptime_baseline = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("naptime_baseline").label("Baseline naptime(ms). Overidden by PolliOS.").defaultValue(DEFAULT_NAPTIME_BUFFER).min(100).max(10000).build();
+auto param_naptime_baseline = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("naptime_baseline").label("Baseline naptime(ms). Overidden by PolliOS.").defaultValue(DEFAULT_NAPTIME_BUFFER).min(0).max(10000).build();
 
 // Camera
 OV2640 cam;
@@ -291,7 +290,7 @@ void handle_root()
       // LED
       {"external_led_present", String(param_external_led_present.value())},
       {"external_led_io_pin", String(param_external_led_io_pin.value())},
-      {"li", String(param_led_intensity.value())},
+      {"led_intensity", String(param_led_intensity.value())},
       // Weather Sensor (BME280)
       {"bme280_present", String(param_bme280_present.value())},
       {"bme280_scl_pin", String(param_bme280_scl_pin.value())},
@@ -311,7 +310,7 @@ void handle_root()
   };
 
   web_server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  auto html = moustache_render(index_html_start, substitutions); // index_html_min_start
+  auto html = moustache_render(index_html_min_start, substitutions);
   web_server.send(200, "text/html", html);
 }
 

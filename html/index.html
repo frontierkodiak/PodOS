@@ -144,9 +144,9 @@
         <div class="row">External LED present:</div>
         <div>{{#external_led_present}}Present{{/external_led_present}}{{^external_led_present}}Not present{{/external_led_present}}</div>
         <div class="row">External LED I/O Pin:</div>
-        <div>{{external_led_io_pin}} [0, 2, 4, 12, 13, 14, 15, 16] </div>
+        <div>{{external_led_io_pin}}</div>
         <div class="row">LED intensity:</div>
-        <div>{{led_intensity}} [0-100]</div>
+        <div>{{led_intensity}}</div>
     </div>
     
     <h2 class="text-center">Weather Sensor (BME280) Settings</h2>
@@ -154,9 +154,9 @@
         <div class="row">BME280 present:</div>
         <div>{{#bme280_present}}Present{{/bme280_present}}{{^bme280_present}}Not present{{/bme280_present}}</div>
         <div class="row">BME280 SCL Pin:</div>
-        <div>{{bme280_scl_pin}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
+        <div>{{bme280_scl_pin}}</div>
         <div class="row">BME280 SDA Pin:</div>
-        <div>{{bme280_sda_pin}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
+        <div>{{bme280_sda_pin}}</div>
     </div>
     
     <h2 class="text-center">Battery Reader Settings</h2>
@@ -164,29 +164,29 @@
         <div class="row">Battery Reader present:</div>
         <div>{{#battery_reader_present}}Present{{/battery_reader_present}}{{^battery_reader_present}}Not present{{/battery_reader_present}}</div>
         <div class="row">Battery Reader I/O Pin:</div>
-        <div>{{battery_reader_io_pin}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
+        <div>{{battery_reader_io_pin}}</div>
     </div>
     
     <h2 class="text-center">GPS (NEO-6m) Settings</h2>
     <div class="flex-table">
         <div class="row">GPS present:</div>
         <div>{{#gps_present}}Present{{/gps_present}}{{^gps_present}}Not present{{/gps_present}}</div>
-        <div class="row">GPS dRX:</div>
-        <div>{{gps_drx}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
-        <div class="row">GPS dTX:</div>
-        <div>{{gps_dtx}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
+        <div class="row">GPS RX I/O Pin:</div>
+        <div>{{gps_drx}}</div>
+        <div class="row">GPS TX I/O Pin:</div>
+        <div>{{gps_dtx}}</div>
         <div class="row">GPS power control present:</div>
         <div>{{#gps_power_control_present}}Present{{/gps_power_control_present}}{{^gps_power_control_present}}Not present{{/gps_power_control_present}}</div>
         <div class="row">GPS power control I/O Pin:</div>
-        <div>{{gps_power_control_io_pin}} [0, 2, 4, 12, 13, 14, 15, 16]</div>
+        <div>{{gps_power_control_io_pin}}</div>
     </div>
 
     <h2 class="text-center">Sleep settings</h2>
     <div class="flex-table">
         <div class="row">Bedtime max wait (s):</div>
-        <div>{{bedtime_max_wait}} [0-3600]</div>
+        <div>{{bedtime_max_wait}}</div>
         <div class="row">Naptime baseline (ms):</div>
-        <div>{{naptime_baseline}} [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000]</div>
+        <div>{{naptime_baseline}}</div>
     </div>
     
 
