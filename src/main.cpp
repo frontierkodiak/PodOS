@@ -62,7 +62,7 @@ const int DEFAULT_EXTERNAL_LED_IO_PIN = 16;
 // Default sensor settings
 
 // Default BME280 settings
-const bool DEFAULT_BME280_PRESENT = false;
+const bool DEFAULT_BME280_PRESENT = true;
 const int DEFAULT_BME280_SCL_PIN = 13;
 const int DEFAULT_BME280_SDA_PIN = 15;
 
@@ -71,7 +71,7 @@ const bool DEFAULT_BATTERY_READER_PRESENT = false;
 const int DEFAULT_BATTERY_READER_IO_PIN = 12;
 
 // Default GPS settings
-const bool DEFAULT_GPS_PRESENT = false;
+const bool DEFAULT_GPS_PRESENT = true;
 const int DEFAULT_GPS_DRX = 2;
 const int DEFAULT_GPS_DTX = 4;
 const bool DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT = false;
@@ -88,6 +88,7 @@ const int DEFAULT_NAPTIME_BUFFER = 25; // milliseconds
 /// Note: we do not need to make params (pins/availability) for BME280, battery, or GPS volatile because we require restarts after changing these settings.
 
 // Connection
+volatile bool wifi_connected = false;
 volatile float rssi = 0;
 // Battery
 volatile int battery_level = 0;
@@ -101,8 +102,8 @@ volatile float latitude = 0;
 volatile float longitude = 0;
 volatile float altitude = 0; 
 volatile bool gps_wakeup_read_requested = false; // Has a GPS reading been requested by the user? (via /update_GPS)
-volatile bool gps_available = false; // Is the GPS available? Can be present but not available if it fails to initialize.
-volatile bool gps_awake = false; // Is the GPS currently awake?
+volatile bool gps_available = true; // Is the GPS available? Can be present but not available if it fails to initialize.
+volatile bool gps_awake = true; // Is the GPS currently awake?
 // Prevent race conditions:
 volatile bool is_reading_gps = false; // Is the GPS currently being read?
 volatile bool is_reading_sensors = false; // Are the sensors currently being read?
@@ -118,7 +119,8 @@ MyGPS myGPS;
 MyBME280 myBME280;
 
 // HTML files
-extern const char index_html_min_start[] asm("_binary_html_index_min_html_start");
+// extern const char index_html_min_start[] asm("_binary_html_index_min_html_start");
+extern const char index_html_start[] asm("_binary_html_index_html_start");
 extern const char restart_html_min_start[] asm("_binary_html_restart_min_html_start");
 
 auto param_group_board = iotwebconf::ParameterGroup("board", "Board settings");
@@ -309,7 +311,7 @@ void handle_root()
   };
 
   web_server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  auto html = moustache_render(index_html_min_start, substitutions);
+  auto html = moustache_render(index_html_start, substitutions); // index_html_min_start
   web_server.send(200, "text/html", html);
 }
 
@@ -603,7 +605,7 @@ void web_server_task(void* parameter) {
 
   for(;;) {
 
-    if (initial_sensor_reading) {
+    if (initial_sensor_reading && wifi_connected) {
       // Read sensors and update global variables
       xTaskNotify(SensorTaskHandle, 0, eNoAction);
       initial_sensor_reading = false;
@@ -860,7 +862,8 @@ void on_connected()
 {
   log_v("on_connected");
   // Start (OTA) Over The Air programming when connected
-  ArduinoOTA.begin();
+  // ArduinoOTA.begin();
+  wifi_connected = true;
 }
 
 void on_config_saved()
@@ -1042,8 +1045,8 @@ void setup() {
     //         } 
     //     })};
 
-    xTaskCreate(web_server_task, "WebServerTask", 4000, NULL, 1, &WebServerTaskHandle);
-    xTaskCreate(update_sensor_values_task, "SensorUpdateTask", 2000, NULL, 1, &SensorTaskHandle);
+    xTaskCreatePinnedToCore(web_server_task, "WebServerTask", 4096, NULL, 1, &WebServerTaskHandle, 0);
+    xTaskCreatePinnedToCore(update_sensor_values_task, "SensorUpdateTask", 4096, NULL, 5, &SensorTaskHandle, 1);
 
     // Set flash led intensity
     analogWrite(LED_FLASH, 100);
