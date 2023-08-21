@@ -1023,8 +1023,7 @@ void setup() {
       } });
 
 
-  // Assuming 2K stack size for each task. Adjust as needed.
-  xTaskCreate(web_server, "WebServerTask", 2000, NULL, 1, NULL);
+  xTaskCreate(web_server, "WebServerTask", 4000, NULL, 1, NULL);
   xTaskCreate(update_sensor_values, "SensorUpdateTask", 2000, NULL, 1, &sensorTaskHandle);
 
 

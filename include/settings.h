@@ -1,13 +1,13 @@
 #pragma once
 
-#define APP_TITLE "ESP32CAM-RTSP"
-#define APP_VERSION "1.0"
+#define APP_TITLE "PodOS"
+#define APP_VERSION "0.3"
 
-#define WIFI_SSID "ESP32CAM-RTSP"
+#define WIFI_SSID "PolliPod"
 #define WIFI_PASSWORD nullptr
 #define CONFIG_VERSION "1.5"
 
-#define OTA_PASSWORD "ESP32CAM-RTSP"
+#define OTA_PASSWORD "PolliPod"
 
 #define RTSP_PORT 554
 
