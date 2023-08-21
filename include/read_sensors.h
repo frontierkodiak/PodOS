@@ -5,8 +5,7 @@
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-// If I2CBME is a two-wire instance, declare it here, otherwise remove or replace with the correct instance.
-TwoWire I2CBME = TwoWire(0); 
+extern TwoWire I2CBME;
 
 class MyBME280 {
   private:

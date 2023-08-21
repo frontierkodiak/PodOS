@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <read_sensors.h>
 
+TwoWire I2CBME = TwoWire(0);
+
 int read_battery_voltage(int vOutPin) {
     int rawValue = analogRead(vOutPin); // Read the analog voltage value
     float in_voltage = map(rawValue, 0, 4095, 0, 3.3); // Map the analog value to the expected value range

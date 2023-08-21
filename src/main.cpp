@@ -31,9 +31,8 @@ void wakeup_gps();
 void shutdown_gps();
 void update_gps();
 void update_rssi();
-void update_battery_level();
+void update_battery();
 void update_bme280();
-void update_sensor_values_task();
 
 /// Web server handlers
 void handle_root();
@@ -606,7 +605,7 @@ void web_server_task(void* parameter) {
 
     if (initial_sensor_reading) {
       // Read sensors and update global variables
-      update_sensor_values_task();
+      xTaskNotify(SensorTaskHandle, 0, eNoAction);
       initial_sensor_reading = false;
     }
 
