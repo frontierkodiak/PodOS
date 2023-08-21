@@ -285,6 +285,84 @@ void handle_root()
   web_server.send(200, "text/html", html);
 }
 
+void handle_get_config() {
+    // Create a JSON object
+    DynamicJsonDocument doc(4096); // 4KB might be necessary due to the number of variables. Adjust if needed.
+
+    doc["param_frame_duration"] = param_frame_duration.value();
+    doc["param_frame_size"] = param_frame_size.value();
+    doc["param_jpg_quality"] = param_jpg_quality.value();
+    doc["param_enable_psram"] = param_enable_psram.value();
+    doc["param_frame_buffers"] = param_frame_buffers.value();
+    doc["param_brightness"] = param_brightness.value();
+    doc["param_contrast"] = param_contrast.value();
+    doc["param_saturation"] = param_saturation.value();
+    doc["param_special_effect"] = param_special_effect.value();
+    doc["param_whitebal"] = param_whitebal.value();
+    doc["param_awb_gain"] = param_awb_gain.value();
+    doc["param_wb_mode"] = param_wb_mode.value();
+    doc["param_exposure_ctrl"] = param_exposure_ctrl.value();
+    doc["param_aec2"] = param_aec2.value();
+    doc["param_ae_level"] = param_ae_level.value();
+    doc["param_aec_value"] = param_aec_value.value();
+    doc["param_gain_ctrl"] = param_gain_ctrl.value();
+    doc["param_agc_gain"] = param_agc_gain.value();
+    doc["param_gain_ceiling"] = param_gain_ceiling.value();
+    doc["param_bpc"] = param_bpc.value();
+    doc["param_wpc"] = param_wpc.value();
+    doc["param_raw_gma"] = param_raw_gma.value();
+    doc["param_lenc"] = param_lenc.value();
+    doc["param_hmirror"] = param_hmirror.value();
+    doc["param_vflip"] = param_vflip.value();
+    doc["param_external_led_present"] = param_external_led_present.value();
+    doc["param_external_led_io_pin"] = param_external_led_io_pin.value();
+    doc["param_led_intensity"] = param_led_intensity.value();
+    doc["param_bme280_present"] = param_bme280_present.value();
+    doc["param_bme280_scl_pin"] = param_bme280_scl_pin.value();
+    doc["param_bme280_sda_pin"] = param_bme280_sda_pin.value();
+    doc["param_battery_reader_io_pin"] = param_battery_reader_io_pin.value();
+    doc["param_gps_present"] = param_gps_present.value();
+    doc["param_gps_drx"] = param_gps_drx.value();
+    doc["param_gps_dtx"] = param_gps_dtx.value();
+    doc["param_gps_pwrctl_pin_present"] = param_gps_pwrctl_pin_present.value();
+    doc["param_gps_pwrctl_io_pin"] = param_gps_pwrctl_io_pin.value();
+    doc["param_bedtime_max_wait"] = param_bedtime_max_wait.value();
+    doc["param_naptime_baseline"] = param_naptime_baseline.value();
+
+    doc["bme280_available"] = bme280_available;
+    doc["gps_available"] = gps_available;
+    doc["param_battery_reader_present"] = param_battery_reader_present.value();
+    doc["gps_awake"] = gps_awake;
+    doc["is_reading_gps"] = is_reading_gps;
+    doc["is_reading_sensors"] = is_reading_sensors;
+    doc["initial_sensor_reading"] = initial_sensor_reading;
+    doc["rssi"] = rssi;
+    doc["battery_level"] = battery_level;
+
+    String output;
+    serializeJson(doc, output);
+    web_server.send(200, "application/json", output);
+}
+
+void handle_get_sensor_status() {
+    // Create a JSON object
+    DynamicJsonDocument doc(2048); // Might be able to reduce this size. Adjust if needed.
+
+    doc["bme280_available"] = bme280_available;
+    doc["gps_available"] = gps_available;
+    doc["gps_awake"] = gps_awake;
+    doc["is_reading_gps"] = is_reading_gps;
+    doc["is_reading_sensors"] = is_reading_sensors;
+    doc["initial_sensor_reading"] = initial_sensor_reading;
+    doc["rssi"] = rssi;
+    doc["battery_reader_present"] = param_battery_reader_present.value();
+    doc["battery_level"] = battery_level;
+
+    String output;
+    serializeJson(doc, output);
+    web_server.send(200, "application/json", output);
+}
+
 void handle_restart()
 {
   log_v("Handle restart");
@@ -311,6 +389,9 @@ void handle_restart()
 }
 
 void handle_naptime() {
+    //// Updates the naptime baseline value.
+    /// This is used to calculate the sleep duration after a snapshot.
+
     // Check if the client has sent a 'naptime' parameter in the request
     if (web_server.hasArg("naptime")) {
         String naptimeValue = web_server.arg("naptime");
@@ -321,6 +402,7 @@ void handle_naptime() {
         // Update the global variable if the value is valid (i.e., greater than zero)
         if (newNaptime > 0) {
             baseline_naptime = newNaptime;
+            param_naptime_baseline.value() = newNaptime; // CLARIFY: Does this value persist?
 
             // Respond to the client indicating the updated naptime value
             web_server.send(200, "text/plain", "Naptime updated to " + String(baseline_naptime) + " milliseconds.");
@@ -330,6 +412,39 @@ void handle_naptime() {
 
     // If the parameter was missing or invalid, send an error response
     web_server.send(400, "text/plain", "Invalid naptime value provided.");
+}
+
+void handle_bedtime() {
+    // Extract sleep duration from the request
+    int sleep_minutes = web_server.arg("duration").toInt();
+
+    // Check if is_reading_sensors is True
+    uint32_t startTime = millis();
+    while (is_reading_sensors) {
+        vTaskDelay(pdMS_TO_TICKS(100)); // Wait for 100ms
+        if (millis() - startTime >= param_bedtime_max_wait.value() * 1000) {
+            // Exceeded maximum waiting time, so break out of the loop
+            break;
+        }
+    }
+
+    // If param_gps_pwrctl_pin_present is True, shut down GPS
+    if (param_gps_pwrctl_pin_present.value()) {
+        shutdown_gps();
+    }
+
+    // Convert minutes to microseconds for esp_sleep_enable_timer_wakeup
+    uint64_t sleep_time_us = sleep_minutes * 60 * 1000000ULL;
+
+    // Configure ESP32 to wake up after sleep_time_us microseconds
+    esp_sleep_enable_timer_wakeup(sleep_time_us);
+
+    // Send a response to the client
+    String message = "Going to bed for " + String(sleep_minutes) + " minutes.";
+    web_server.send(200, "text/plain", message.c_str());
+
+    // Finally, put the ESP32 into deep sleep
+    esp_deep_sleep_start();
 }
 
 void handle_snapshot()
@@ -443,20 +558,35 @@ void handle_update_GPS()
 ////// TASK 1: web_server //////
 /// COMMENT: TASK 1
 void web_server(void* parameter) {
+  
+  // Set up URL handlers on the web server
+  web_server.on("/", HTTP_GET, handle_root);
+  web_server.on("/config", [] { iotWebConf.handleConfig(); });
+  web_server.on("/restart", HTTP_GET, handle_restart);
+  web_server.on("/snapshot", HTTP_GET, handle_snapshot);
+  web_server.on("/get_config", HTTP_GET, handle_get_config);
+  web_server.on("/get_sensor_status", HTTP_GET, handle_get_sensor_status);
+  web_server.on("/sensors", HTTP_GET, handle_sensors);
+  web_server.on("/update_GPS", HTTP_GET, handle_update_GPS);
+  web_server.on("/naptime", HTTP_GET, handle_naptime);
+  web_server.on("/bedtime", HTTP_GET, handle_bedtime);
+  web_server.onNotFound([]() { iotWebConf.handleNotFound(); });
+
   for(;;) {
 
-    if initial_sensor_reading {
+    if (initial_sensor_reading) {
       // Read sensors and update global variables
       update_sensor_values();
       initial_sensor_reading = false;
     }
-    // Your web server logic will go here.
 
-    // A delay is recommended to prevent the task from being a tight loop
-    // and consuming unnecessary CPU. Adjust the delay based on your needs.
+    iotWebConf.doLoop();
+
+    // A delay to prevent the task from consuming unnecessary CPU
     vTaskDelay(pdMS_TO_TICKS(10));  
   }
 }
+
 
 
 ////// TASK 2: update_sensor_values //////
@@ -487,12 +617,12 @@ void update_sensor_values(void* parameter) {
       update_rssi();
 
       // Check if GPS is present and update
-      if (param_gps_present && !gps_wakeup_read_requested) {
+      if (param_gps_present.value() && !gps_wakeup_read_requested) {
         update_gps();
       }
 
       // Conditionally wake up GPS and update, if power-controlled and /update_GPS has been called
-      if (param_gps_present && (param_gps_power_pin_present && gps_wakeup_read_requested)) {
+      if (param_gps_present.value()&& (param_gps_pwrctl_pin_present.value() && gps_wakeup_read_requested)) {
         wakeup_single_reading_gps();
         gps_wakeup_read_requested = false;s
       }
@@ -555,8 +685,8 @@ void update_gps() {
 
 // Function to shut down the GPS by turning off its power supply using the NPN transistor.
 void shutdown_gps() {
-    if (param_gps_pwrctl_pin_present) {
-        digitalWrite(param_gps_pwrctl_io_pin, LOW); // Turn off the NPN transistor
+    if (param_gps_pwrctl_pin_present.value()) {
+        digitalWrite(param_gps_pwrctl_io_pin.value(), LOW); // Turn off the NPN transistor
         Serial.println("GPS has been shut down.");
     } else {
         Serial.println("GPS power management not available.");
@@ -566,8 +696,8 @@ void shutdown_gps() {
 
 // Function to wake up the GPS by turning on its power supply.
 void wakeup_gps() {
-    if (param_gps_pwrctl_pin_present) {
-        digitalWrite(param_gps_pwrctl_io_pin, HIGH); // Turn on the NPN transistor
+    if (param_gps_pwrctl_pin_present.value()) {
+        digitalWrite(param_gps_pwrctl_io_pin.value(), HIGH); // Turn on the NPN transistor
         Serial.println("GPS is waking up...");
         delay(2000); // A brief delay to allow the GPS some initial setup time. 
     } else {
@@ -578,7 +708,7 @@ void wakeup_gps() {
 
 // Function to wake up the GPS, read a single fix, and then shut it down again.
 void wakeup_single_reading_gps() {
-    if (!param_gps_pwrctl_pin_present) {
+    if (!param_gps_pwrctl_pin_present.value()) {
         Serial.println("GPS power management not available.");
         return;
     }
@@ -717,7 +847,7 @@ void on_config_saved()
 
 void setup() {
     Serial.begin(9600);
-    if (param_gps_pwrctl_pin_present) {
+    if (param_gps_pwrctl_pin_present.value()) {
         pinMode(GPS_POWER_PIN, OUTPUT);
         shutdown_gps();  // Start with the GPS off.
 
@@ -871,19 +1001,6 @@ void setup() {
     gps_awake = false;
   }
 
-  // Set up required URL handlers on the web server
-  //// CLARIFY: If we create in setup is it still available in task1?
-  web_server.on("/", HTTP_GET, handle_root);
-  web_server.on("/config", []
-                { iotWebConf.handleConfig(); });
-  web_server.on("/restart", HTTP_GET, handle_restart);
-  // Camera snapshot
-  web_server.on("/snapshot", HTTP_GET, handle_snapshot);
-  // Camera snapshot & start reading sensors
-  web_server.on("/snapshot_readsensors", HTTP_GET, handle_snapshot_readsensors);
-
-  web_server.onNotFound([]()
-                        { iotWebConf.handleNotFound(); });
 
   ArduinoOTA
       .setPassword(OTA_PASSWORD)
@@ -905,16 +1022,17 @@ void setup() {
       default: log_e("OTA error: %u", error);
       } });
 
+
+  // Assuming 2K stack size for each task. Adjust as needed.
+  xTaskCreate(web_server, "WebServerTask", 2000, NULL, 1, NULL);
+  xTaskCreate(update_sensor_values, "SensorUpdateTask", 2000, NULL, 1, &sensorTaskHandle);
+
+
   // Set flash led intensity
   analogWrite(LED_FLASH, 100);
 }
 
-void loop()
-{
-  iotWebConf.doLoop();
+void loop() {
   ArduinoOTA.handle();
-
-// TODO: Add web_server, read_sensor task handles
-
   yield();
 }
