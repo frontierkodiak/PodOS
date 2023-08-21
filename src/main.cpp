@@ -7,7 +7,6 @@
 #include <OV2640.h>
 #include <ESPmDNS.h>
 #include <esp_sleep.h>
-//#include <rtsp_server.h>
 #include <lookup_camera_config.h>
 #include <lookup_camera_effect.h>
 #include <lookup_camera_frame_size.h>
@@ -17,11 +16,39 @@
 #include <format_number.h>
 #include <moustache.h>
 #include <settings.h>
+#include <ArduinoJson.h>
 #include <Adafruit_BME280.h>
 #include <Adafruit_Sensor.h>
 #include <read_sensors.h>
 #include <read_gps.h>
-// TODO: Import GPS library
+
+//// function prototypes
+
+/// Sensor helpers
+void shutdown_gps();  // Function prototype
+void wakeup_single_reading_gps();
+void wakeup_gps();
+void shutdown_gps();
+void update_gps();
+void update_rssi();
+void update_battery_level();
+void update_bme280();
+void update_sensor_values_task();
+
+/// Web server handlers
+void handle_root();
+void handle_get_config();
+void handle_get_sensor_status();
+void handle_sensors();
+void handle_snapshot();
+void handle_restart();
+void handle_bedtime();
+void handle_naptime();
+void handle_update_GPS();
+
+/// Task handlers
+TaskHandle_t WebServerTaskHandle = NULL;
+TaskHandle_t SensorTaskHandle = NULL;
 
 
 ////// CONSTANTS //////
@@ -87,7 +114,9 @@ volatile bool initial_sensor_reading = true;
 volatile int baseline_naptime = 500; // milliseconds, overridden by PolliOS -> /naptime endpoint
 
 
-
+////// Sensor objects
+MyGPS myGPS;
+MyBME280 myBME280;
 
 // HTML files
 extern const char index_html_min_start[] asm("_binary_html_index_min_html_start");
@@ -143,7 +172,7 @@ auto param_group_gps = iotwebconf::ParameterGroup("gps", "GPS (NEO-6m) settings"
 auto param_gps_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_present").label("GPS present").defaultValue(DEFAULT_GPS_PRESENT).build();
 auto param_gps_drx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_drx").label("GPS dRX").defaultValue(DEFAULT_GPS_DRX).min(2).max(16).build();
 auto param_gps_dtx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_dtx").label("GPS dTX").defaultValue(DEFAULT_GPS_DTX).min(2).max(16).build();
-auto param_gps_pwrctl_pin_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_power_control_present").label("GPS power control present").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT).build();
+auto param_gps_pwrctl_io_pin_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_power_control_present").label("GPS power control present").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT).build();
 auto param_gps_pwrctl_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_power_control_io_pin").label("GPS power control I/O pin").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN).min(2).max(16).build();
 // NOTE: /sensors returns current sensor values. /snapshot_readsensors does NOT trigger GPS activation, unless no GPS values exist yet.
 
@@ -151,7 +180,7 @@ auto param_group_bedtime = iotwebconf::ParameterGroup("bedtime", "Bedtime settin
 auto param_bedtime_max_wait = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bedtime_max_wait").label("Max sensor wait time forcing bedtime(s)").defaultValue(DEFAULT_BEDTIME_MAX_WAIT).min(0).max(300).build();
 
 auto param_group_naptime = iotwebconf::ParameterGroup("naptime", "Naptime settings");
-auto param_naptime_baseline = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("naptime_baseline").label("Baseline naptime(ms). Overidden by PolliOS.").defaultValue(DEFAULT_NAPTIME).min(100).max(10000).build();
+auto param_naptime_baseline = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("naptime_baseline").label("Baseline naptime(ms). Overidden by PolliOS.").defaultValue(DEFAULT_NAPTIME_BUFFER).min(100).max(10000).build();
 
 // Camera
 OV2640 cam;
@@ -273,17 +302,18 @@ void handle_root()
       {"gps_present", String(param_gps_present.value())},
       {"gps_drx", String(param_gps_drx.value())},
       {"gps_dtx", String(param_gps_dtx.value())},
-      {"gps_power_control_present", String(param_gps_pwrctl_pin_present.value())},
+      {"gps_power_control_present", String(param_gps_pwrctl_io_pin_present.value())},
       {"gps_power_control_io_pin", String(param_gps_pwrctl_io_pin.value())},
       // Bedtime
-      {"bedtime_max_wait", String(param_bedtime_max_wait.value())}};
-      // Naptime
-      {"naptime_baseline", String(param_naptime_baseline.value())}};
+    {"bedtime_max_wait", String(param_bedtime_max_wait.value())},
+    {"naptime_baseline", String(param_naptime_baseline.value())}
+  };
 
   web_server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   auto html = moustache_render(index_html_min_start, substitutions);
   web_server.send(200, "text/html", html);
 }
+
 
 void handle_get_config() {
     // Create a JSON object
@@ -324,7 +354,7 @@ void handle_get_config() {
     doc["param_gps_present"] = param_gps_present.value();
     doc["param_gps_drx"] = param_gps_drx.value();
     doc["param_gps_dtx"] = param_gps_dtx.value();
-    doc["param_gps_pwrctl_pin_present"] = param_gps_pwrctl_pin_present.value();
+    doc["param_gps_pwrctl_io_pin_present"] = param_gps_pwrctl_io_pin_present.value();
     doc["param_gps_pwrctl_io_pin"] = param_gps_pwrctl_io_pin.value();
     doc["param_bedtime_max_wait"] = param_bedtime_max_wait.value();
     doc["param_naptime_baseline"] = param_naptime_baseline.value();
@@ -428,8 +458,8 @@ void handle_bedtime() {
         }
     }
 
-    // If param_gps_pwrctl_pin_present is True, shut down GPS
-    if (param_gps_pwrctl_pin_present.value()) {
+    // If param_gps_pwrctl_io_pin_present is True, shut down GPS
+    if (param_gps_pwrctl_io_pin_present.value()) {
         shutdown_gps();
     }
 
@@ -537,7 +567,7 @@ void handle_update_GPS()
     web_server.send(404, "text/plain", "GPS is not present.");
     return;
   }
-  if (!param_gps_pwrctl_pin_present.value()) {
+  if (!param_gps_pwrctl_io_pin_present.value()) {
     web_server.send(404, "text/plain", "GPS power control is not present. Just call /sensors instead.");
     return;
   }
@@ -557,7 +587,7 @@ void handle_update_GPS()
 
 ////// TASK 1: web_server //////
 /// COMMENT: TASK 1
-void web_server(void* parameter) {
+void web_server_task(void* parameter) {
   
   // Set up URL handlers on the web server
   web_server.on("/", HTTP_GET, handle_root);
@@ -576,7 +606,7 @@ void web_server(void* parameter) {
 
     if (initial_sensor_reading) {
       // Read sensors and update global variables
-      update_sensor_values();
+      update_sensor_values_task();
       initial_sensor_reading = false;
     }
 
@@ -589,10 +619,10 @@ void web_server(void* parameter) {
 
 
 
-////// TASK 2: update_sensor_values //////
+////// TASK 2: update_sensor_values_task //////
 /// COMMENT: TASK 2
 
-void update_sensor_values(void* parameter) {
+void update_sensor_values_task(void* parameter) {
   uint32_t notificationValue;
   const TickType_t xMaxBlockTime = pdMS_TO_TICKS(100);  // Max wait time of 100ms for a notification
   for(;;) {
@@ -609,7 +639,7 @@ void update_sensor_values(void* parameter) {
       }
 
       // Check if battery reader is present and update
-      if (param_battery_reader_present) {
+      if (param_battery_reader_present.value()) {
         update_battery();
       }
 
@@ -622,9 +652,9 @@ void update_sensor_values(void* parameter) {
       }
 
       // Conditionally wake up GPS and update, if power-controlled and /update_GPS has been called
-      if (param_gps_present.value()&& (param_gps_pwrctl_pin_present.value() && gps_wakeup_read_requested)) {
+      if (param_gps_present.value()&& (param_gps_pwrctl_io_pin_present.value() && gps_wakeup_read_requested)) {
         wakeup_single_reading_gps();
-        gps_wakeup_read_requested = false;s
+        gps_wakeup_read_requested = false;
       }
 
       // Clear the global flag to indicate that we are no longer reading the sensors
@@ -647,7 +677,7 @@ void update_bme280() {
 
 void update_battery() {
     // Battery
-    battery_level = read_battery_voltage_function();
+    battery_level = read_battery_voltage(param_battery_reader_io_pin.value());
 }
 
 void update_gps() {
@@ -660,7 +690,7 @@ void update_gps() {
         return;
     }
     if (!gps_awake) {
-        Serial.printin("GPS is asleep. This shouldn't happen, not waking up.");
+        Serial.println("GPS is asleep. This shouldn't happen, not waking up.");
     }
 
     // Set the global flag to indicate that we are reading the GPS
@@ -685,7 +715,7 @@ void update_gps() {
 
 // Function to shut down the GPS by turning off its power supply using the NPN transistor.
 void shutdown_gps() {
-    if (param_gps_pwrctl_pin_present.value()) {
+    if (param_gps_pwrctl_io_pin_present.value()) {
         digitalWrite(param_gps_pwrctl_io_pin.value(), LOW); // Turn off the NPN transistor
         Serial.println("GPS has been shut down.");
     } else {
@@ -696,7 +726,7 @@ void shutdown_gps() {
 
 // Function to wake up the GPS by turning on its power supply.
 void wakeup_gps() {
-    if (param_gps_pwrctl_pin_present.value()) {
+    if (param_gps_pwrctl_io_pin_present.value()) {
         digitalWrite(param_gps_pwrctl_io_pin.value(), HIGH); // Turn on the NPN transistor
         Serial.println("GPS is waking up...");
         delay(2000); // A brief delay to allow the GPS some initial setup time. 
@@ -708,7 +738,7 @@ void wakeup_gps() {
 
 // Function to wake up the GPS, read a single fix, and then shut it down again.
 void wakeup_single_reading_gps() {
-    if (!param_gps_pwrctl_pin_present.value()) {
+    if (!param_gps_pwrctl_io_pin_present.value()) {
         Serial.println("GPS power management not available.");
         return;
     }
@@ -847,12 +877,7 @@ void on_config_saved()
 
 void setup() {
     Serial.begin(9600);
-    if (param_gps_pwrctl_pin_present.value()) {
-        pinMode(GPS_POWER_PIN, OUTPUT);
-        shutdown_gps();  // Start with the GPS off.
 
-
-  
   // Disable brownout
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
@@ -951,87 +976,81 @@ void setup() {
   iotWebConf.setStatusPin(LED_BUILTIN, LOW);
   iotWebConf.init();
 
-  camera_init_result = initialize_camera();
-  if (camera_init_result == ESP_OK)
-    update_camera_settings();
-  else
-    log_e("Failed to initialize camera: 0x%0x. Type: %s, frame size: %s, frame rate: %d ms, jpeg quality: %d", camera_init_result, param_board.value(), param_frame_size.value(), param_frame_duration.value(), param_jpg_quality.value());
+    camera_init_result = initialize_camera();
+    if (camera_init_result == ESP_OK)
+        update_camera_settings();
+    else
+        log_e("Failed to initialize camera: 0x%0x. Type: %s, frame size: %s, frame rate: %d ms, jpeg quality: %d", 
+        camera_init_result, param_board.value(), param_frame_size.value(), param_frame_duration.value(), param_jpg_quality.value());
 
-
-  //// Check sensors and initialize if present
-  // Check if BME280 is present, initialize if so
-  if (param_bme280_present.value()) {
-    log_v("BME280 present, initializing...");
-    MyBME280 myBME280(param_bme280_sda_pin.value(), param_bme280_scl_pin.value());
-    if (myBME280.setup()) {  // Check if BME280 initialization succeeded
-      log_v("BME280 initialized successfully.");
-      bme280_available = true;
-      update_bme280();
+    ///// Check sensors and initialize if present
+    //// We initialize global sensors with default constructors, then call init method here with actual pins if present.
+    /// Check if BME280 is present, initialize if so
+    if (param_bme280_present.value()) {
+        log_v("BME280 present, initializing...");
+        myBME280.setPins(param_bme280_sda_pin.value(), param_bme280_scl_pin.value());
+        if (myBME280.setup()) {  // Check if BME280 initialization succeeded
+            log_v("BME280 initialized successfully.");
+            bme280_available = true;
+            update_bme280();
+        } else {
+            log_v("Failed to initialize BME280.");
+            bme280_available = false;
+        }
     } else {
-      log_v("Failed to initialize BME280.");
-      bme280_available = false;
+        log_v("BME280 not present.");
+        bme280_available = false;
     }
-  } else {
-    log_v("BME280 not present.");
-    bme280_available = false;
-  }
 
-  /// Setup GPS and get initial read. Update global variable (gps_awake).
-  // If power-controlled, turn off GPS after initial read, and set gps_awake to false.
-  if (param_gps_present.value()) {
-    log_v("GPS present, initializing...");
-    MyGPS myGPS(param_gps_drx.value(), param_gps_dtx.value());
-    if (myGPS.setup()) {  // Check if GPS initialization succeeded
-      log_v("GPS initialized successfully.");
-      gps_available = true;
-      update_gps(); // Attempt to get initial GPS fix. Skips if not available.
-      if (param_gps_pwrctl_pin_present.value()) {
-        shutdown_gps();
-      } else {
-        gps_awake = true;
-      }
+    /// Setup GPS and get initial read. Update global variable (gps_awake).
+    // If power-controlled, turn off GPS after initial read, and set gps_awake to false.
+    if (param_gps_present.value()) {
+        log_v("GPS present, initializing...");
+        myGPS.init(param_gps_drx.value(), param_gps_dtx.value());
+        if (myGPS.setup()) {  // Check if GPS initialization succeeded
+            log_v("GPS initialized successfully.");
+            gps_available = true;
+            update_gps(); // Attempt to get initial GPS fix. Skips if not available.
+            if (param_gps_pwrctl_io_pin_present.value()) {
+                shutdown_gps();
+            } else {
+                gps_awake = true;
+            }
+        } else {
+            log_v("Failed to initialize GPS.");
+            gps_available = false;
+            gps_awake = true; // Can be awake but unavailable
+        }
     } else {
-      log_v("Failed to initialize GPS.");
-      gps_available = false;
-      gps_awake = true; // Can be awake but unavailable
+        log_v("GPS not present.");
+        gps_available = false;
+        gps_awake = false;
     }
-  } else {
-    log_v("GPS not present.");
-    gps_available = false;
-    gps_awake = false;
-  }
 
+    // ArduinoOTA {
+    //     .setPassword(OTA_PASSWORD)
+    //     .onStart([]() { log_w("Starting OTA update: %s", ArduinoOTA.getCommand() == U_FLASH ? "sketch" : "filesystem"); })
+    //     .onEnd([]() { log_w("OTA update done!"); })
+    //     .onProgress([](unsigned int progress, unsigned int total) { log_i("OTA Progress: %u%%\r", (progress / (total / 100))); })
+    //     .onError([](ota_error_t error) {
+    //         switch (error) {
+    //             case OTA_AUTH_ERROR: log_e("OTA: Auth Failed"); break;
+    //             case OTA_BEGIN_ERROR: log_e("OTA: Begin Failed"); break;
+    //             case OTA_CONNECT_ERROR: log_e("OTA: Connect Failed"); break;
+    //             case OTA_RECEIVE_ERROR: log_e("OTA: Receive Failed"); break;
+    //             case OTA_END_ERROR: log_e("OTA: End Failed"); break;
+    //             default: log_e("OTA error: %u", error);
+    //         } 
+    //     })};
 
-  ArduinoOTA
-      .setPassword(OTA_PASSWORD)
-      .onStart([]()
-               { log_w("Starting OTA update: %s", ArduinoOTA.getCommand() == U_FLASH ? "sketch" : "filesystem"); })
-      .onEnd([]()
-             { log_w("OTA update done!"); })
-      .onProgress([](unsigned int progress, unsigned int total)
-                  { log_i("OTA Progress: %u%%\r", (progress / (total / 100))); })
-      .onError([](ota_error_t error)
-               {
-      switch (error)
-      {
-      case OTA_AUTH_ERROR: log_e("OTA: Auth Failed"); break;
-      case OTA_BEGIN_ERROR: log_e("OTA: Begin Failed"); break;
-      case OTA_CONNECT_ERROR: log_e("OTA: Connect Failed"); break;
-      case OTA_RECEIVE_ERROR: log_e("OTA: Receive Failed"); break;
-      case OTA_END_ERROR: log_e("OTA: End Failed"); break;
-      default: log_e("OTA error: %u", error);
-      } });
+    xTaskCreate(web_server_task, "WebServerTask", 4000, NULL, 1, &WebServerTaskHandle);
+    xTaskCreate(update_sensor_values_task, "SensorUpdateTask", 2000, NULL, 1, &SensorTaskHandle);
 
-
-  xTaskCreate(web_server, "WebServerTask", 4000, NULL, 1, NULL);
-  xTaskCreate(update_sensor_values, "SensorUpdateTask", 2000, NULL, 1, &sensorTaskHandle);
-
-
-  // Set flash led intensity
-  analogWrite(LED_FLASH, 100);
+    // Set flash led intensity
+    analogWrite(LED_FLASH, 100);
 }
 
 void loop() {
-  ArduinoOTA.handle();
+  // ArduinoOTA.handle();
   yield();
 }

@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <read_sensors.h>
 
 int read_battery_voltage(int vOutPin) {

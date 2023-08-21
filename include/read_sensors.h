@@ -1,14 +1,12 @@
 #ifndef READ_SENSORS_H
 #define READ_SENSORS_H
 
-#include <Arduino.h> // Include Arduino.h to use data types and Serial
+#include <Arduino.h>
 #include <Adafruit_BME280.h>
 #include <Wire.h>
 
-// Workaround for using BME280 with ESP32-CAM (no SDA/SCL pins available, but second I2C bus available)
-#define I2C_SDA 15
-#define I2C_SCL 14
-TwoWire I2CBME = TwoWire(0); // initialize Two Wire instance in setup()
+// If I2CBME is a two-wire instance, declare it here, otherwise remove or replace with the correct instance.
+TwoWire I2CBME = TwoWire(0); 
 
 class MyBME280 {
   private:
@@ -16,9 +14,28 @@ class MyBME280 {
     int sdaPin, sclPin;
 
   public:
+    // Default constructor
+    MyBME280() {
+        // Optionally set default values or leave them uninitialized
+        sdaPin = -1;
+        sclPin = -1;
+    }
+
+    // Parameterized constructor
     MyBME280(int sda, int scl) : sdaPin(sda), sclPin(scl) {}
 
+    // Optionally add a method to initialize pins later if using the default constructor
+    void setPins(int sda, int scl) {
+        sdaPin = sda;
+        sclPin = scl;
+    }
+
     bool setup() {
+      if(sdaPin == -1 || sclPin == -1) {
+          Serial.println("BME280 pins not set!");
+          return false;  // Indicate failure
+      }
+
       Serial.println("Attempting BME280 setup...");
       I2CBME.begin(sdaPin, sclPin, 100000);
 
