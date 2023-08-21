@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# PlatformIO
+.pioenvs
+.pioenvs/*
+.pio
+.pio/*
+.vscode
+.vscode/*
+.logs
+.logs/*
