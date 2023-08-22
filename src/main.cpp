@@ -464,8 +464,9 @@ void handle_bedtime() {
     esp_sleep_enable_timer_wakeup(sleep_time_us);
 
     // Send a response to the client
-    String message = "Going to bed for " + String(sleep_minutes) + " minutes.";
-    web_server.send(200, "text/plain", message.c_str());
+    web_server.send(200, "text/plain", "Going to bed for " + String(sleep_minutes) + " minutes.");
+
+    vTaskDelay(pdMS_TO_TICKS(2000));  // Delay for 2 seconds to allow the response to be sent
 
     // Finally, put the ESP32 into deep sleep
     esp_deep_sleep_start();
