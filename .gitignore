@@ -32,11 +32,8 @@
 *.app
 
 # PlatformIO
-.pioenvs
-.pioenvs/*
-.pio
 .pio/*
-.vscode
 .vscode/*
-.logs
-.logs/*
+
+# Ignore everything in logs directory
+logs/*

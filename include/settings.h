@@ -1,21 +1,21 @@
 #pragma once
 
 #define APP_TITLE "PodOS"
-#define APP_VERSION "0.3"
+#define APP_VERSION "1.0" // PodOS 0.3
 
 #define WIFI_SSID "PolliPod"
 #define WIFI_PASSWORD nullptr
 #define CONFIG_VERSION "1.5"
 
-#define OTA_PASSWORD "PolliPod"
+// #define OTA_PASSWORD "PolliPod"
 
-#define RTSP_PORT 554
+// #define RTSP_PORT 554
 
 #define DEFAULT_CAMERA_CONFIG "AI THINKER"
 #define DEFAULT_ENABLE_PSRAM psramFound()
 #define DEFAULT_BUFFERS (psramFound() ? 2 : 1)
 #define DEFAULT_FRAME_DURATION 100
-#define DEFAULT_FRAME_SIZE (psramFound() ? "UXGA (1600x1200)" : "SVGA (800x600)")
+#define DEFAULT_FRAME_SIZE (psramFound() ? "UXGA (1600x1200)" : "UXGA (1600x1200)") // "UXGA (1600x1200)" : "SVGA (800x600)")
 #define DEFAULT_JPEG_QUALITY (psramFound() ? 10 : 12)
 
 #define DEFAULT_BRIGHTNESS  0

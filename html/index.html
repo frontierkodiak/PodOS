@@ -138,7 +138,7 @@
         <div class="row">Max free block:</div>
         <div>{{MaxAllocHeap}}</div>
     </div>
-
+<!-- 
     <h2 class="text-center">Peripheral Settings</h2>
     <div class="flex-table">
         <div class="row">External LED present:</div>
@@ -147,7 +147,7 @@
         <div>{{external_led_io_pin}}</div>
         <div class="row">LED intensity:</div>
         <div>{{led_intensity}}</div>
-    </div>
+    </div> -->
     
     <h2 class="text-center">Weather Sensor (BME280) Settings</h2>
     <div class="flex-table">
@@ -296,14 +296,8 @@
 
     <h2 class="text-center">Special URLs / API</h2>
     <div class="flex-table">
-        <div class="row">RTSP camera stream:</div>
-        <div><a href="rtsp://{{IpV4}}:{{RtspPort}}/mjpeg/1">rtsp://{{IpV4}}:{{RtspPort}}/mjpeg/1</a></div>
-        <div class="row">JPEG Motion stream:</div>
-        <div><a href="http://{{IpV4}}/stream" target="_blank">http://{{IpV4}}/stream</a></div>
         <div class="row">Snapshot of the camera:</div>
         <div><a href="http://{{IpV4}}/snapshot " target="_blank">http://{{IpV4}}/snapshot</a> </div>
-        <div class="row">Intensity of the flash led (0-255):</div>
-        <div><a href="http: //{{IpV4}}/flash?v=0">http://{{IpV4}}/flash?v=0</a> (Authentication required)</div>
         <div class="row">Restart the camera:</div>
         <div><a href="http://{{IpV4}}/restart">http://{{IpV4}}/restart</a> (Authentication required)</div>
     </div>
