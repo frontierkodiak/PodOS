@@ -49,6 +49,9 @@ void handle_update_GPS();
 TaskHandle_t WebServerTaskHandle = NULL;
 TaskHandle_t SensorTaskHandle = NULL;
 
+// Modem sleep
+void setModemSleep();
+void wakeModemSleep();
 
 ////// CONSTANTS //////
 //// All updates to these trigger Pod restart. ////
@@ -90,6 +93,8 @@ const int DEFAULT_NAPTIME_BUFFER = 25; // milliseconds
 // Connection
 volatile bool wifi_connected = false;
 volatile float rssi = 0;
+// Camera
+volatile bool camera_available = false;
 // Battery
 volatile int battery_level = 0;
 // BME280
@@ -357,6 +362,7 @@ void handle_get_config() {
     doc["param_bedtime_max_wait"] = param_bedtime_max_wait.value();
     doc["param_naptime_baseline"] = param_naptime_baseline.value();
 
+    doc["camera_available"] = camera_available;
     doc["bme280_available"] = bme280_available;
     doc["gps_available"] = gps_available;
     doc["param_battery_reader_present"] = param_battery_reader_present.value();
@@ -378,6 +384,7 @@ void handle_get_sensor_status() {
     // Create a JSON object
     DynamicJsonDocument doc(2048); // Might be able to reduce this size. Adjust if needed.
 
+    doc["camera_available"] = camera_available;
     doc["bme280_available"] = bme280_available;
     doc["gps_available"] = gps_available;
     doc["gps_awake"] = gps_awake;
@@ -532,13 +539,17 @@ void handle_snapshot()
     // Ensure sleep duration is positive
     if (sleepDuration > 0)
     {
-      // Enable timer wakeup for the calculated sleep duration
-      esp_sleep_enable_timer_wakeup(sleepDuration * 1000);  // microseconds
-      esp_light_sleep_start();  // Enter light sleep mode
+      // Enable modem sleep for the calculated sleep duration and set CPU frequency to 40MHz
+      setModemSleep();
+      
+      // Use a delay for the desired modem sleep duration
+      delay(sleepDuration);
+
+      // After the delay, restore the modem and set CPU frequency back to 240MHz
+      wakeModemSleep();
     }
   }
 }
-
 void handle_sensors()
 {
 
@@ -953,6 +964,20 @@ void on_config_saved()
   // config_changed = true;
 }
 
+void setModemSleep() {
+    WiFi.setSleep(true);
+    if (!setCpuFrequencyMhz(40)){
+        Serial2.println("Not valid frequency!");
+    }
+    else {
+        setCpuFrequencyMhz(80);
+    }
+}
+ 
+void wakeModemSleep() {
+    setCpuFrequencyMhz(240);
+}
+
 void setup() {
     Serial.begin(9600);
 
@@ -1054,11 +1079,14 @@ void setup() {
   }
 
   camera_init_result = initialize_camera();
-  if (camera_init_result == ESP_OK)
+  if (camera_init_result == ESP_OK) {
       update_camera_settings();
-  else
+      camera_available = true;
+  } else {
       log_e("Failed to initialize camera: 0x%0x. Type: %s, frame size: %s, frame rate: %d ms, jpeg quality: %d", 
       camera_init_result, param_board.value(), param_frame_size.value(), param_frame_duration.value(), param_jpg_quality.value());
+      camera_available = false;
+  }
 
   ///// Check sensors and initialize if present
   //// We initialize global sensors with default constructors, then call init method here with actual pins if present.
