@@ -1033,7 +1033,7 @@ void on_config_saved()
 void setModemSleep() {
     // This is fake modem sleep: radio sleeps for AP beacon interval, which is normal WiFi operation.
     // Power savings come from CPU downclocking.
-    WiFi.setSleep(true);
+    // WiFi.setSleep(true);
     log_i("Downclocking to 40MHz");
     
     if (!setCpuFrequencyMhz(40)){
