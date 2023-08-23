@@ -1,7 +1,7 @@
 #pragma once
 
 #define APP_TITLE "PodOS"
-#define APP_VERSION "1.0" // PodOS 0.3
+#define APP_VERSION "0.4" // PodOS 0.4
 
 #define WIFI_SSID "PolliPod"
 #define WIFI_PASSWORD nullptr
