@@ -431,17 +431,19 @@ void handle_naptime() {
         // Convert the received value to an integer
         int newNaptime = naptimeValue.toInt();
 
+        // Handle the special case where naptime is set to 0
+        if (newNaptime == 0) {
+            naptime_enabled = false;
+            web_server.send(200, "text/plain", "Naptime disabled.");
+            return;
+        }
+        
         // Update the global variable if the value is valid (i.e., greater than zero)
-        if (newNaptime > 0) {
+        else if (newNaptime > 0) {
             baseline_naptime = newNaptime;
             param_naptime_baseline.value() = newNaptime; // CLARIFY: Does this value persist?
 
-            // Set naptime_enabled based on newNaptime value
-            if (newNaptime == 0) {
-                naptime_enabled = false;
-            } else {
-                naptime_enabled = true;
-            }
+            naptime_enabled = true;
 
             // Respond to the client indicating the updated naptime value
             web_server.send(200, "text/plain", "Naptime updated to " + String(baseline_naptime) + " milliseconds.");
@@ -614,7 +616,14 @@ void web_server_task(void* parameter) {
   web_server.on("/bedtime", HTTP_POST, handle_bedtime);
   web_server.on("/shutdown_GPS", HTTP_POST, shutdown_gps);
   web_server.on("/wakeup_GPS", HTTP_POST, wakeup_gps);
-  web_server.onNotFound([]() { iotWebConf.handleNotFound(); });
+  web_server.onNotFound([]() {
+    if (web_server.uri() == "/index.html") {
+      web_server.sendHeader("Location", "/");
+      web_server.send(301);
+    } else {
+      iotWebConf.handleNotFound();
+    }
+  });
   log_v("Task 1: Web server handlers set up");
 
   for(;;) {
