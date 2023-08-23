@@ -9,7 +9,7 @@ bool MyGPS::setup() {
 
 
 gps_fix MyGPS::readFix() {
-    while (gps.available(*gpsSerial)) {
+    while (gps.available(gpsSerial)) {
         currentFix = gps.read();
     }
     return currentFix;

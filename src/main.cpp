@@ -26,6 +26,7 @@
 
 /// Sensor helpers
 void shutdown_gps();  // Function prototype
+void patient_single_reading_gps(uint32_t wait_time);
 void wakeup_single_reading_gps();
 void wakeup_gps();
 void update_gps();
@@ -60,8 +61,8 @@ TaskHandle_t SensorTaskHandle = NULL;
 
 // Default BME280 settings
 const bool DEFAULT_BME280_PRESENT = false;
-const int DEFAULT_BME280_SCL_PIN = 13;
-const int DEFAULT_BME280_SDA_PIN = 15;
+const int DEFAULT_BME280_SCL_PIN = 15;
+const int DEFAULT_BME280_SDA_PIN = 14;
 
 // Default battery reader settings
 const bool DEFAULT_BATTERY_READER_PRESENT = false;
@@ -73,6 +74,8 @@ const int DEFAULT_GPS_DRX = -1; // This is Pod RX. Remember that Pod RX -> GPS T
 const int DEFAULT_GPS_DTX = -1;
 const bool DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT = false;
 const int DEFAULT_GPS_PWRDWN_IO_PIN = 2;
+const uint32_t DEFAULT_GPS_PATIENT_WAIT = 1100; // milliseconds. How long to wait for GPS to return data? Not intended to be used as fix wait time.
+const uint32_t DEFAULT_GPS_WAKEUP_WAIT = 60000; // milliseconds. How long to wait for a fix when waking up the GPS (pwr-controlled). Stacks with patient wait for cases where the GPS is awoken from sleep.
 
 // TODO: Add any other necessary GPS defaults
 
@@ -98,16 +101,17 @@ volatile bool bme280_available = false; // Is the BME280 available? Can be prese
 volatile float latitude = 0;
 volatile float longitude = 0;
 volatile float altitude = 0; 
-volatile bool gps_wakeup_read_requested = false; // Has a GPS reading been requested by the user? (via /update_GPS)
-volatile bool gps_available = true; // Is the GPS available? Can be present but not available if it fails to initialize.
-volatile bool gps_awake = true; // Is the GPS currently awake?
+volatile bool gps_patient_read_requested = false; // Has a GPS reading been requested by the user? (via /update_GPS)
+volatile bool gps_available = false; // Is the GPS available? Can be present but not available if it fails to initialize.
+volatile bool gps_awake = false; // Is the GPS currently awake?
 // Prevent race conditions:
 volatile bool is_reading_gps = false; // Is the GPS currently being read?
 volatile bool is_reading_sensors = false; // Are the sensors currently being read?
 // Track if we just woke up from bedtime or power cycle
-volatile bool initial_sensor_reading = true;
+volatile bool initial_sensor_reading = false;
 
 // Naptime
+volatile bool naptime_enabled = false; // Is naptime enabled?
 volatile int baseline_naptime = 500; // milliseconds, overridden by PolliOS -> /naptime endpoint
 
 
@@ -153,19 +157,19 @@ auto param_colorbar = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("cb").
 
 auto param_group_bme280 = iotwebconf::ParameterGroup("bme280", "Weather sensor (BME280) settings");
 auto param_bme280_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("bme280_present").label("BME280 present").defaultValue(DEFAULT_BME280_PRESENT).build();
-auto param_bme280_scl_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_io_pin").label("BME280 SCL Pin").defaultValue(DEFAULT_BME280_SCL_PIN).min(2).max(16).build();
-auto param_bme280_sda_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_sda_pin").label("BME280 SDA Pin").defaultValue(DEFAULT_BME280_SDA_PIN).min(2).max(16).build();
+auto param_bme280_scl_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_io_pin").label("BME280 SCL Pin").defaultValue(DEFAULT_BME280_SCL_PIN).min(-1).max(16).build();
+auto param_bme280_sda_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_sda_pin").label("BME280 SDA Pin").defaultValue(DEFAULT_BME280_SDA_PIN).min(-1).max(16).build();
 
 auto param_group_battery_reader = iotwebconf::ParameterGroup("battery_reader", "Battery Reader settings");
 auto param_battery_reader_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("battery_reader_present").label("Battery Reader present").defaultValue(DEFAULT_BATTERY_READER_PRESENT).build();
-auto param_battery_reader_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("battery_reader_io_pin").label("Battery Reader I/O Pin").defaultValue(DEFAULT_BATTERY_READER_IO_PIN).min(2).max(16).build();
+auto param_battery_reader_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("battery_reader_io_pin").label("Battery Reader I/O Pin").defaultValue(DEFAULT_BATTERY_READER_IO_PIN).min(-1).max(16).build();
 
 auto param_group_gps = iotwebconf::ParameterGroup("gps", "GPS (NEO-6m) settings");
 auto param_gps_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_present").label("GPS present").defaultValue(DEFAULT_GPS_PRESENT).build();
-auto param_gps_drx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_drx").label("GPS dRX").defaultValue(DEFAULT_GPS_DRX).min(2).max(16).build();
-auto param_gps_dtx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_dtx").label("GPS dTX").defaultValue(DEFAULT_GPS_DTX).min(2).max(16).build();
+auto param_gps_drx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_drx").label("GPS dRX").defaultValue(DEFAULT_GPS_DRX).min(-1).max(16).build();
+auto param_gps_dtx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_dtx").label("GPS dTX").defaultValue(DEFAULT_GPS_DTX).min(-1).max(16).build();
 auto param_gps_pwrctl_io_pin_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_power_control_present").label("GPS power control present").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT).build();
-auto param_gps_pwrctl_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_power_control_io_pin").label("GPS power control I/O pin").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN).min(2).max(16).build();
+auto param_gps_pwrctl_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_power_control_io_pin").label("GPS power control I/O pin").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN).min(-1).max(16).build();
 
 auto param_group_bedtime = iotwebconf::ParameterGroup("bedtime", "Bedtime settings");
 auto param_bedtime_max_wait = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bedtime_max_wait").label("Max sensor wait time forcing bedtime(s)").defaultValue(DEFAULT_BEDTIME_MAX_WAIT).min(0).max(3000).build();
@@ -428,6 +432,13 @@ void handle_naptime() {
             baseline_naptime = newNaptime;
             param_naptime_baseline.value() = newNaptime; // CLARIFY: Does this value persist?
 
+            // Set naptime_enabled based on newNaptime value
+            if (newNaptime == 0) {
+                naptime_enabled = false;
+            } else {
+                naptime_enabled = true;
+            }
+
             // Respond to the client indicating the updated naptime value
             web_server.send(200, "text/plain", "Naptime updated to " + String(baseline_naptime) + " milliseconds.");
             return;
@@ -510,7 +521,7 @@ void handle_snapshot()
   int sleepDuration = baseline_naptime - elapsedTime - DEFAULT_NAPTIME_BUFFER;  // Subtract 25ms buffer
 
   // Check that is_reading_GPS and is_reading_sensors are false
-  if (!is_reading_gps && !is_reading_sensors)
+  if (!is_reading_gps && !is_reading_sensors && naptime_enabled)
   {
     // Ensure sleep duration is positive
     if (sleepDuration > 0)
@@ -561,13 +572,13 @@ void handle_update_GPS()
     web_server.send(404, "text/plain", "GPS is not present.");
     return;
   }
-  if (!param_gps_pwrctl_io_pin_present.value()) {
-    web_server.send(404, "text/plain", "GPS power control is not present. Just call /sensors instead.");
-    return;
-  }
+  // if (!param_gps_pwrctl_io_pin_present.value()) {
+  //   web_server.send(404, "text/plain", "GPS power control is not present. Just call /sensors instead.");
+  //   return;
+  // }
 
   // Trigger task2 to read GPS and update global variables.
-  gps_wakeup_read_requested = true;
+  gps_patient_read_requested = true;
 
   // Trigger the task to run by sending it a notification.
   if (SensorTaskHandle != NULL) {
@@ -659,16 +670,23 @@ void update_sensor_values_task(void* parameter) {
       }
 
       // Check if GPS is present and update
-      if (param_gps_present.value() && !gps_wakeup_read_requested) {
+      if (param_gps_present.value() && !gps_patient_read_requested) {
         log_v("Task 2: Updating GPS");
         update_gps();
       }
 
+      // Ask for a patient gps reading if requested and not power-controlled
+      if (param_gps_present.value()&& (!param_gps_pwrctl_io_pin_present.value() && gps_patient_read_requested)) {
+        log_v("Task 2: Patiently reading GPS and updating");
+        patient_single_reading_gps(DEFAULT_GPS_PATIENT_WAIT);
+        gps_patient_read_requested = false;
+      }
+
       // Conditionally wake up GPS and update, if power-controlled and /update_GPS has been called
-      if (param_gps_present.value()&& (param_gps_pwrctl_io_pin_present.value() && gps_wakeup_read_requested)) {
-        log_v("Task 2: Waking up GPS and updating");
+      if (param_gps_present.value()&& (param_gps_pwrctl_io_pin_present.value() && gps_patient_read_requested)) {
+        log_v("Task 2: Waking up GPS for patient read and updating");
         wakeup_single_reading_gps();
-        gps_wakeup_read_requested = false;
+        gps_patient_read_requested = false;
       }
 
       // Clear the global flag to indicate that we are no longer reading the sensors
@@ -705,6 +723,7 @@ void update_gps() {
     }
     if (!gps_awake) {
         Serial.println("GPS is asleep. wakeup read not requested, not waking up.");
+        return;
     }
 
     // Set the global flag to indicate that we are reading the GPS
@@ -715,11 +734,25 @@ void update_gps() {
     // Only update the global values if we have a valid GPS fix
     if (myGPS.getLatitude() != 0 && myGPS.getLongitude() != 0) {
         // GPS
+        Serial.println("GPS fix acquired. Updating global values.");
         latitude = myGPS.getLatitude();
+        Serial.println("Latitude updated:");
+        Serial.println(latitude);
         longitude = myGPS.getLongitude();
+        Serial.println("Longitude updated:");
+        Serial.println(longitude);
         altitude = myGPS.getAltitude();
+        Serial.println("Altitude updated:");
+        Serial.println(altitude);
     } else {
         Serial.println("No valid GPS fix. Values not updated.");
+        // Log current lat/lon/altitude values
+        Serial.print("Latitude: ");
+        Serial.println(myGPS.getLatitude());
+        Serial.print("Longitude: ");
+        Serial.println(myGPS.getLongitude());
+        Serial.print("Altitude: ");
+        Serial.println(myGPS.getAltitude());
     }
 
     // Clear the global flag to indicate that we are no longer reading the GPS
@@ -751,32 +784,24 @@ void wakeup_gps() {
     gps_awake = true;
 }
 
-// Function to wake up the GPS, read a single fix, and then shut it down again.
-void wakeup_single_reading_gps() {
-    if (!param_gps_pwrctl_io_pin_present.value()) {
-        Serial.println("GPS power management not available.");
+void patient_single_reading_gps(uint32_t wait_time) {
+    if (!gps_available) {
+        Serial.println("GPS is not available.");
         return;
     }
     if (is_reading_gps) {
         Serial.println("GPS is already being read.");
         return;
     }
-    if (gps_awake) {
-        update_gps();
-        shutdown_gps();
-    }
-    if (!gps_available) {
-        Serial.println("GPS is not available.");
-        return;
-    }
 
+    Serial.println("Patiently reading GPS with wait time: " + String(wait_time) + " seconds.");
+
+    
     // Set the global flag to indicate that we are reading the GPS
     is_reading_gps = true;
-    
-    wakeup_gps();
-    
+
     bool gotFix = false;
-    uint32_t timeout = millis() + 60000; // We will wait for a maximum of 60 seconds for a GPS fix.
+    uint32_t timeout = millis() + (wait_time); // wait_time is in milliseconds
 
     while (!gotFix && millis() < timeout) {
         myGPS.readFix(); // Update the current fix in the MyGPS object
@@ -786,18 +811,42 @@ void wakeup_single_reading_gps() {
             // Update the global volatile variables
             latitude = myGPS.getLatitude();
             longitude = myGPS.getLongitude();
-            altitude = myGPS.getAltitude();
-            // STRETCH: Would be neater if this called update_gps() instead of duplicating the code.
-            
+            altitude = myGPS.getAltitude();            
             gotFix = true;
         } else {
-            delay(1000);  // Delay for 1 second before trying again.
+            delay(50);  // Delay for 50ms to try again
         }
     }
 
-    if (!gotFix) {
-        Serial.println("Failed to acquire GPS fix within the allotted time.");
+    // Clear the global flag to indicate that we are no longer reading the GPS
+    is_reading_gps = false;
+}
+
+// Function to wake up the GPS, read a single fix (patient), and then shut it down again.
+/// Wraps wakeup_gps(), patient_single_reading_gps(), and shutdown_gps().
+void wakeup_single_reading_gps() {
+    if (is_reading_gps) {
+        Serial.println("GPS is already being read.");
+        return;
     }
+    if (gps_awake) {
+        patient_single_reading_gps(DEFAULT_GPS_PATIENT_WAIT);
+        shutdown_gps();
+    }
+    if (!gps_available) {
+        Serial.println("GPS is not available.");
+        return;
+    }
+
+    
+    wakeup_gps();
+
+    // Calculate the total wait time
+    uint32_t totalWaitTime = DEFAULT_GPS_PATIENT_WAIT + DEFAULT_GPS_WAKEUP_WAIT;
+
+    // Call patient_single_reading_gps with the total wait time
+    patient_single_reading_gps(totalWaitTime);
+      
 
     shutdown_gps();
 
@@ -1030,7 +1079,7 @@ void setup() {
           log_v("GPS initialized successfully.");
           gps_available = true;
           update_gps(); // Attempt to get initial GPS fix. Skips if not available.
-          if (param_gps_pwrctl_io_pin_present.value()) {
+          if (param_gps_pwrctl_io_pin_present.value() >> 0) {
               shutdown_gps();
           } else {
               gps_awake = true;
