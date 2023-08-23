@@ -366,6 +366,8 @@ void handle_get_config() {
     doc["initial_sensor_reading"] = initial_sensor_reading;
     doc["rssi"] = rssi;
     doc["battery_level"] = battery_level;
+    doc["naptime_enabled"] = naptime_enabled;
+    doc["baseline_naptime"] = baseline_naptime;
 
     String output;
     serializeJson(doc, output);
@@ -385,6 +387,8 @@ void handle_get_sensor_status() {
     doc["rssi"] = rssi;
     doc["battery_reader_present"] = param_battery_reader_present.value();
     doc["battery_level"] = battery_level;
+    doc["naptime_enabled"] = naptime_enabled;
+    doc["baseline_naptime"] = baseline_naptime;
 
     String output;
     serializeJson(doc, output);
