@@ -308,8 +308,8 @@ void handle_root()
       {"gps_power_control_present", String(param_gps_pwrctl_io_pin_present.value())},
       {"gps_power_control_io_pin", String(param_gps_pwrctl_io_pin.value())},
       // Bedtime
-    {"bedtime_max_wait", String(param_bedtime_max_wait.value())},
-    {"naptime_baseline", String(param_naptime_baseline.value())}
+      {"bedtime_max_wait", String(param_bedtime_max_wait.value())},
+      {"naptime_baseline", String(param_naptime_baseline.value())}
   };
 
   Serial.print("ESP free heap (pre-render handle_root()): ");
@@ -884,6 +884,63 @@ void wakeup_single_reading_gps() {
     is_reading_gps = false;
 }
 
+void sensor_setup() {
+  ///// Check sensors and initialize if present
+  //// We initialize global sensors with default constructors, then call init method here with actual pins if present.
+  /// Check if BME280 is present, initialize if so
+  if (param_bme280_present.value()) {
+      log_v("BME280 present, initializing...");
+      log_v("SDA pin: %d", param_bme280_sda_pin.value());
+      log_v("SCL pin: %d", param_bme280_scl_pin.value());
+      myBME280.setPins(param_bme280_sda_pin.value(), param_bme280_scl_pin.value());
+      if (myBME280.setup()) {  // Check if BME280 initialization succeeded
+          log_v("BME280 initialized successfully.");
+          bme280_available = true;
+          update_bme280();
+      } else {
+          log_v("Failed to initialize BME280.");
+          bme280_available = false;
+      }
+  } else {
+      log_v("BME280 not present.");
+      bme280_available = false;
+  }
+// Check if Battery Reader is present, initialize if so
+  /// Setup GPS and get initial read. Update global variable (gps_awake).
+  // If power-controlled, turn off GPS after initial read, and set gps_awake to false.
+  if (param_gps_present.value()) {
+      log_v("GPS present, initializing...");
+      log_v("DRX pin: %d", param_gps_drx.value());
+      log_v("DTX pin: %d", param_gps_dtx.value());
+      myGPS.init(param_gps_drx.value(), param_gps_dtx.value());
+      if (myGPS.setup()) {  // Check if GPS initialization succeeded
+          log_v("GPS initialized successfully.");
+          gps_available = true;
+          update_gps(); // Attempt to get initial GPS fix. Skips if not available.
+          if (param_gps_pwrctl_io_pin_present.value() >> 0) {
+              shutdown_gps();
+          } else {
+              gps_awake = true;
+          }
+      } else {
+          log_v("Failed to initialize GPS.");
+          gps_available = false;
+          gps_awake = true; // Can be awake but unavailable
+      }
+  } else {
+      log_v("GPS not present.");
+      gps_available = false;
+      gps_awake = false;
+  }
+
+  if (param_battery_reader_present.value()) {
+    log_i("Battery level monitor is present.");
+    log_i("Assigned I/O pin: %d", param_battery_reader_io_pin.value());
+  } else {
+    log_i("Battery level monitor is not present.");
+  }
+}
+
 esp_err_t initialize_camera()
 {
   log_v("initialize_camera");
@@ -957,6 +1014,9 @@ void on_connected()
   // Start (OTA) Over The Air programming when connected
   // ArduinoOTA.begin();
   wifi_connected = true;
+
+  // Setup sensors
+  sensor_setup();
 }
 
 void on_config_saved()
@@ -1099,61 +1159,8 @@ void setup() {
       camera_available = false;
   }
 
-  ///// Check sensors and initialize if present
-  //// We initialize global sensors with default constructors, then call init method here with actual pins if present.
-  /// Check if BME280 is present, initialize if so
-  if (param_bme280_present.value()) {
-      log_v("BME280 present, initializing...");
-      log_v("SDA pin: %d", param_bme280_sda_pin.value());
-      log_v("SCL pin: %d", param_bme280_scl_pin.value());
-      myBME280.setPins(param_bme280_sda_pin.value(), param_bme280_scl_pin.value());
-      if (myBME280.setup()) {  // Check if BME280 initialization succeeded
-          log_v("BME280 initialized successfully.");
-          bme280_available = true;
-          update_bme280();
-      } else {
-          log_v("Failed to initialize BME280.");
-          bme280_available = false;
-      }
-  } else {
-      log_v("BME280 not present.");
-      bme280_available = false;
-  }
-
-  /// Setup GPS and get initial read. Update global variable (gps_awake).
-  // If power-controlled, turn off GPS after initial read, and set gps_awake to false.
-  if (param_gps_present.value()) {
-      log_v("GPS present, initializing...");
-      log_v("DRX pin: %d", param_gps_drx.value());
-      log_v("DTX pin: %d", param_gps_dtx.value());
-      myGPS.init(param_gps_drx.value(), param_gps_dtx.value());
-      if (myGPS.setup()) {  // Check if GPS initialization succeeded
-          log_v("GPS initialized successfully.");
-          gps_available = true;
-          update_gps(); // Attempt to get initial GPS fix. Skips if not available.
-          if (param_gps_pwrctl_io_pin_present.value() >> 0) {
-              shutdown_gps();
-          } else {
-              gps_awake = true;
-          }
-      } else {
-          log_v("Failed to initialize GPS.");
-          gps_available = false;
-          gps_awake = true; // Can be awake but unavailable
-      }
-  } else {
-      log_v("GPS not present.");
-      gps_available = false;
-      gps_awake = false;
-  }
-
-  if (param_battery_reader_present.value()) {
-    log_i("Battery level monitor is present.");
-    log_i("Assigned I/O pin: %d", param_battery_reader_io_pin.value());
-  } else {
-    log_i("Battery level monitor is not present.");
-  }
-  
+  xTaskCreatePinnedToCore(web_server_task, "WebServerTask", 8192, NULL, 1, &WebServerTaskHandle, 0);
+  xTaskCreatePinnedToCore(update_sensor_values_task, "SensorUpdateTask", 4096, NULL, 5, &SensorTaskHandle, 1);
 
     // ArduinoOTA {
     //     .setPassword(OTA_PASSWORD)
@@ -1171,10 +1178,6 @@ void setup() {
     //         } 
     //     })};
 
-  xTaskCreatePinnedToCore(web_server_task, "WebServerTask", 8192, NULL, 1, &WebServerTaskHandle, 0);
-  xTaskCreatePinnedToCore(update_sensor_values_task, "SensorUpdateTask", 4096, NULL, 5, &SensorTaskHandle, 1);
-
-    
 
     // Set flash led intensity
     // analogWrite(LED_FLASH, 100);  // Disable, as we need IO4 for sensors
