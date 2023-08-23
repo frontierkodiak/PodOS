@@ -530,9 +530,15 @@ void handle_snapshot()
   uint32_t endTime = millis();
   uint32_t elapsedTime = endTime - startTime;
 
-  // Calculate the naptime based on baseline naptime, elapsed time, and a buffer
+  // Log the length of time the snapshot took
+  log_i("Snapshot took %u milliseconds", elapsedTime);
+
+  // Calculate the sleep duration
   int sleepDuration = baseline_naptime - elapsedTime - DEFAULT_NAPTIME_BUFFER;  // Subtract 25ms buffer
 
+  // Log the calculated sleep duration
+  log_i("Sleep duration: %d milliseconds", sleepDuration);
+  
   // Check that is_reading_GPS and is_reading_sensors are false
   if (!is_reading_gps && !is_reading_sensors && naptime_enabled)
   {
@@ -965,7 +971,11 @@ void on_config_saved()
 }
 
 void setModemSleep() {
+    // This is fake modem sleep: radio sleeps for AP beacon interval, which is normal WiFi operation.
+    // Power savings come from CPU downclocking.
     WiFi.setSleep(true);
+    log_i("Downclocking to 40MHz");
+    
     if (!setCpuFrequencyMhz(40)){
         Serial2.println("Not valid frequency!");
     }
@@ -975,6 +985,7 @@ void setModemSleep() {
 }
  
 void wakeModemSleep() {
+    log_i("Upclocking to 240MHz");
     setCpuFrequencyMhz(240);
 }
 
