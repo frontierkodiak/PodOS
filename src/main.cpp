@@ -112,8 +112,7 @@ volatile bool gps_awake = false; // Is the GPS currently awake?
 // Prevent race conditions:
 volatile bool is_reading_gps = false; // Is the GPS currently being read?
 volatile bool is_reading_sensors = false; // Are the sensors currently being read?
-// Track if we just woke up from bedtime or power cycle
-volatile bool initial_sensor_reading = false;
+
 
 // Naptime
 volatile bool naptime_enabled = false; // Is naptime enabled?
@@ -193,7 +192,7 @@ auto thingName = String(WIFI_SSID) + "-" + String(ESP.getEfuseMac(), 16);
 IotWebConf iotWebConf(thingName.c_str(), &dnsServer, &web_server, WIFI_PASSWORD, CONFIG_VERSION);
 
 // // Keep track of config changes. This will allow a reset of the device
-// bool config_changed = false;
+bool config_changed = false;
 // Camera initialization result
 esp_err_t camera_init_result;
 
@@ -233,7 +232,7 @@ void handle_root()
 
   moustache_variable_t substitutions[] = {
       // // Config Changed?
-      // {"ConfigChanged", String(config_changed)},
+      {"ConfigChanged", String(config_changed)},
       // Version / CPU
       {"AppTitle", APP_TITLE},
       {"AppVersion", APP_VERSION},
@@ -359,17 +358,16 @@ void handle_get_config() {
     doc["param_gps_dtx"] = param_gps_dtx.value();
     doc["param_gps_pwrctl_io_pin_present"] = param_gps_pwrctl_io_pin_present.value();
     doc["param_gps_pwrctl_io_pin"] = param_gps_pwrctl_io_pin.value();
+    doc["param_battery_reader_present"] = param_battery_reader_present.value();
     doc["param_bedtime_max_wait"] = param_bedtime_max_wait.value();
     doc["param_naptime_baseline"] = param_naptime_baseline.value();
 
     doc["camera_available"] = camera_available;
     doc["bme280_available"] = bme280_available;
     doc["gps_available"] = gps_available;
-    doc["param_battery_reader_present"] = param_battery_reader_present.value();
     doc["gps_awake"] = gps_awake;
     doc["is_reading_gps"] = is_reading_gps;
     doc["is_reading_sensors"] = is_reading_sensors;
-    doc["initial_sensor_reading"] = initial_sensor_reading;
     doc["rssi"] = rssi;
     doc["battery_level"] = battery_level;
     doc["naptime_enabled"] = naptime_enabled;
@@ -390,7 +388,6 @@ void handle_get_sensor_status() {
     doc["gps_awake"] = gps_awake;
     doc["is_reading_gps"] = is_reading_gps;
     doc["is_reading_sensors"] = is_reading_sensors;
-    doc["initial_sensor_reading"] = initial_sensor_reading;
     doc["rssi"] = rssi;
     doc["battery_reader_present"] = param_battery_reader_present.value();
     doc["battery_level"] = battery_level;
@@ -644,14 +641,6 @@ void web_server_task(void* parameter) {
   log_v("Task 1: Web server handlers set up");
 
   for(;;) {
-
-    if (initial_sensor_reading && wifi_connected) {
-      // Read sensors and update global variables
-      // VERIFY: May want to review this if I2C on ADC2 causes WiFi to drop!
-      log_v("Task 1: Initial sensor reading triggered.");
-      xTaskNotify(SensorTaskHandle, 0, eNoAction);
-      initial_sensor_reading = false;
-    }
 
     iotWebConf.doLoop();
 
@@ -1027,7 +1016,7 @@ void on_config_saved()
   // Update camera setting
   update_camera_settings();
   handle_restart();
-  // config_changed = true;
+  config_changed = true;
 }
 
 void setModemSleep() {
