@@ -371,8 +371,6 @@ void handle_get_config() {
     doc["gps_awake"] = gps_awake;
     doc["is_reading_gps"] = is_reading_gps;
     doc["is_reading_sensors"] = is_reading_sensors;
-    doc["rssi"] = rssi;
-    doc["battery_level"] = battery_level;
     doc["naptime_enabled"] = naptime_enabled;
     doc["naptime_baseline"] = naptime_baseline;
 
@@ -390,8 +388,6 @@ void handle_get_sensor_status() {
     doc["gps_available"] = gps_available;
     doc["gps_awake"] = gps_awake;
     doc["battery_reader_available"] = param_battery_reader_present.value();
-    doc["rssi"] = rssi;
-    doc["battery_level"] = battery_level;
     doc["is_reading_gps"] = is_reading_gps;
     doc["is_reading_sensors"] = is_reading_sensors;
     doc["naptime_enabled"] = naptime_enabled;
