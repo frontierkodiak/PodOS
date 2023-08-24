@@ -69,12 +69,12 @@ const int DEFAULT_BME280_SDA_PIN = 14;
 
 // Default battery reader settings
 const bool DEFAULT_BATTERY_READER_PRESENT = false;
-const int DEFAULT_BATTERY_READER_IO_PIN = 4;
+const int DEFAULT_battery_reader_pin = 4;
 
 // Default GPS settings
 const bool DEFAULT_GPS_PRESENT = false;
-const int DEFAULT_GPS_DRX = -1; // This is Pod RX. Remember that Pod RX -> GPS TX. (DEV: purple)
-const int DEFAULT_GPS_DTX = -1;
+const int DEFAULT_gps_rx = -1; // This is Pod RX. Remember that Pod RX -> GPS TX. (DEV: purple)
+const int DEFAULT_gps_tx = -1;
 const bool DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT = false;
 const int DEFAULT_GPS_PWRDWN_IO_PIN = 2;
 const uint32_t DEFAULT_GPS_PATIENT_WAIT = 1100; // milliseconds. How long to wait for GPS to return data? Not intended to be used as fix wait time.
@@ -116,7 +116,7 @@ volatile bool is_reading_sensors = false; // Are the sensors currently being rea
 
 // Naptime
 volatile bool naptime_enabled = false; // Is naptime enabled?
-volatile int baseline_naptime = 500; // milliseconds, overridden by PolliOS -> /naptime endpoint
+volatile int naptime_baseline = 500; // milliseconds, overridden by PolliOS -> /naptime endpoint
 
 
 ////// Sensor objects
@@ -161,19 +161,19 @@ auto param_colorbar = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("cb").
 
 auto param_group_bme280 = iotwebconf::ParameterGroup("bme280", "Weather sensor (BME280) settings");
 auto param_bme280_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("bme280_present").label("BME280 present").defaultValue(DEFAULT_BME280_PRESENT).build();
-auto param_bme280_scl_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_io_pin").label("BME280 SCL Pin").defaultValue(DEFAULT_BME280_SCL_PIN).min(-1).max(16).build();
+auto param_bme280_scl_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_scl_pin").label("BME280 SCL Pin").defaultValue(DEFAULT_BME280_SCL_PIN).min(-1).max(16).build();
 auto param_bme280_sda_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bme280_sda_pin").label("BME280 SDA Pin").defaultValue(DEFAULT_BME280_SDA_PIN).min(-1).max(16).build();
 
 auto param_group_battery_reader = iotwebconf::ParameterGroup("battery_reader", "Battery Reader settings");
 auto param_battery_reader_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("battery_reader_present").label("Battery Reader present").defaultValue(DEFAULT_BATTERY_READER_PRESENT).build();
-auto param_battery_reader_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("battery_reader_io_pin").label("Battery Reader I/O Pin").defaultValue(DEFAULT_BATTERY_READER_IO_PIN).min(-1).max(16).build();
+auto param_battery_reader_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("battery_reader_pin").label("Battery Reader I/O Pin").defaultValue(DEFAULT_battery_reader_pin).min(-1).max(16).build();
 
 auto param_group_gps = iotwebconf::ParameterGroup("gps", "GPS (NEO-6m) settings");
 auto param_gps_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_present").label("GPS present").defaultValue(DEFAULT_GPS_PRESENT).build();
-auto param_gps_drx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_drx").label("GPS dRX").defaultValue(DEFAULT_GPS_DRX).min(-1).max(16).build();
-auto param_gps_dtx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_dtx").label("GPS dTX").defaultValue(DEFAULT_GPS_DTX).min(-1).max(16).build();
-auto param_gps_pwrctl_io_pin_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_power_control_present").label("GPS power control present").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT).build();
-auto param_gps_pwrctl_io_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_power_control_io_pin").label("GPS power control I/O pin").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN).min(-1).max(16).build();
+auto param_gps_rx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_rx").label("GPS RX").defaultValue(DEFAULT_gps_rx).min(-1).max(16).build();
+auto param_gps_tx = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_tx").label("GPS TX").defaultValue(DEFAULT_gps_tx).min(-1).max(16).build();
+auto param_gps_pwrctl_pin_present = iotwebconf::Builder<iotwebconf::CheckboxTParameter>("gps_power_control_present").label("GPS power control present").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN_PRESENT).build();
+auto param_gps_pwrctl_pin = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("gps_power_control_io_pin").label("GPS power control I/O pin").defaultValue(DEFAULT_GPS_PWRDWN_IO_PIN).min(-1).max(16).build();
 
 auto param_group_bedtime = iotwebconf::ParameterGroup("bedtime", "Bedtime settings");
 auto param_bedtime_max_wait = iotwebconf::Builder<iotwebconf::IntTParameter<int>>("bedtime_max_wait").label("Max sensor wait time forcing bedtime(s)").defaultValue(DEFAULT_BEDTIME_MAX_WAIT).min(0).max(3000).build();
@@ -299,13 +299,13 @@ void handle_root()
       {"bme280_sda_pin", String(param_bme280_sda_pin.value())},
       // Battery Reader
       {"battery_reader_present", String(param_battery_reader_present.value())},
-      {"battery_reader_io_pin", String(param_battery_reader_io_pin.value())},
+      {"battery_reader_pin", String(param_battery_reader_pin.value())},
       // GPS (NEO-6m)
       {"gps_present", String(param_gps_present.value())},
-      {"gps_drx", String(param_gps_drx.value())},
-      {"gps_dtx", String(param_gps_dtx.value())},
-      {"gps_power_control_present", String(param_gps_pwrctl_io_pin_present.value())},
-      {"gps_power_control_io_pin", String(param_gps_pwrctl_io_pin.value())},
+      {"gps_rx", String(param_gps_rx.value())},
+      {"gps_tx", String(param_gps_tx.value())},
+      {"gps_power_control_present", String(param_gps_pwrctl_pin_present.value())},
+      {"gps_power_control_io_pin", String(param_gps_pwrctl_pin.value())},
       // Bedtime
       {"bedtime_max_wait", String(param_bedtime_max_wait.value())},
       {"naptime_baseline", String(param_naptime_baseline.value())}
@@ -327,43 +327,43 @@ void handle_get_config() {
     doc["pod_name"] = iotWebConf.getThingName();
     doc["firmware_name"] = APP_TITLE;
     doc["firmware_version"] = APP_VERSION;
-    doc["param_frame_duration"] = param_frame_duration.value();
-    doc["param_frame_size"] = param_frame_size.value();
-    doc["param_jpg_quality"] = param_jpg_quality.value();
-    doc["param_enable_psram"] = param_enable_psram.value();
-    doc["param_frame_buffers"] = param_frame_buffers.value();
-    doc["param_brightness"] = param_brightness.value();
-    doc["param_contrast"] = param_contrast.value();
-    doc["param_saturation"] = param_saturation.value();
-    doc["param_special_effect"] = param_special_effect.value();
-    doc["param_whitebal"] = param_whitebal.value();
-    doc["param_awb_gain"] = param_awb_gain.value();
-    doc["param_wb_mode"] = param_wb_mode.value();
-    doc["param_exposure_ctrl"] = param_exposure_ctrl.value();
-    doc["param_aec2"] = param_aec2.value();
-    doc["param_ae_level"] = param_ae_level.value();
-    doc["param_aec_value"] = param_aec_value.value();
-    doc["param_gain_ctrl"] = param_gain_ctrl.value();
-    doc["param_agc_gain"] = param_agc_gain.value();
-    doc["param_gain_ceiling"] = param_gain_ceiling.value();
-    doc["param_bpc"] = param_bpc.value();
-    doc["param_wpc"] = param_wpc.value();
-    doc["param_raw_gma"] = param_raw_gma.value();
-    doc["param_lenc"] = param_lenc.value();
-    doc["param_hmirror"] = param_hmirror.value();
-    doc["param_vflip"] = param_vflip.value();
-    doc["param_bme280_present"] = param_bme280_present.value();
-    doc["param_bme280_scl_pin"] = param_bme280_scl_pin.value();
-    doc["param_bme280_sda_pin"] = param_bme280_sda_pin.value();
-    doc["param_battery_reader_io_pin"] = param_battery_reader_io_pin.value();
-    doc["param_gps_present"] = param_gps_present.value();
-    doc["param_gps_drx"] = param_gps_drx.value();
-    doc["param_gps_dtx"] = param_gps_dtx.value();
-    doc["param_gps_pwrctl_io_pin_present"] = param_gps_pwrctl_io_pin_present.value();
-    doc["param_gps_pwrctl_io_pin"] = param_gps_pwrctl_io_pin.value();
-    doc["param_battery_reader_present"] = param_battery_reader_present.value();
-    doc["param_bedtime_max_wait"] = param_bedtime_max_wait.value();
-    doc["param_naptime_baseline"] = param_naptime_baseline.value();
+    doc["frame_duration"] = param_frame_duration.value();
+    doc["frame_size"] = param_frame_size.value();
+    doc["jpg_quality"] = param_jpg_quality.value();
+    doc["enable_psram"] = param_enable_psram.value();
+    doc["frame_buffers"] = param_frame_buffers.value();
+    doc["brightness"] = param_brightness.value();
+    doc["contrast"] = param_contrast.value();
+    doc["saturation"] = param_saturation.value();
+    doc["special_effect"] = param_special_effect.value();
+    doc["whitebal"] = param_whitebal.value();
+    doc["awb_gain"] = param_awb_gain.value();
+    doc["wb_mode"] = param_wb_mode.value();
+    doc["exposure_ctrl"] = param_exposure_ctrl.value();
+    doc["aec2"] = param_aec2.value();
+    doc["ae_level"] = param_ae_level.value();
+    doc["aec_value"] = param_aec_value.value();
+    doc["gain_ctrl"] = param_gain_ctrl.value();
+    doc["agc_gain"] = param_agc_gain.value();
+    doc["gain_ceiling"] = param_gain_ceiling.value();
+    doc["bpc"] = param_bpc.value();
+    doc["wpc"] = param_wpc.value();
+    doc["raw_gma"] = param_raw_gma.value();
+    doc["lenc"] = param_lenc.value();
+    doc["hmirror"] = param_hmirror.value();
+    doc["vflip"] = param_vflip.value();
+    doc["bme280_present"] = param_bme280_present.value();
+    doc["bme280_scl_pin"] = param_bme280_scl_pin.value();
+    doc["bme280_sda_pin"] = param_bme280_sda_pin.value();
+    doc["battery_reader_pin"] = param_battery_reader_pin.value();
+    doc["gps_present"] = param_gps_present.value();
+    doc["gps_rx"] = param_gps_rx.value();
+    doc["gps_tx"] = param_gps_tx.value();
+    doc["gps_pwrctl_pin_present"] = param_gps_pwrctl_pin_present.value();
+    doc["gps_pwrctl_pin"] = param_gps_pwrctl_pin.value();
+    doc["battery_reader_available"] = param_battery_reader_present.value();
+    doc["bedtime_max_wait"] = param_bedtime_max_wait.value();
+    doc["naptime_baseline"] = param_naptime_baseline.value();
 
     doc["camera_available"] = camera_available;
     doc["bme280_available"] = bme280_available;
@@ -374,7 +374,7 @@ void handle_get_config() {
     doc["rssi"] = rssi;
     doc["battery_level"] = battery_level;
     doc["naptime_enabled"] = naptime_enabled;
-    doc["baseline_naptime"] = baseline_naptime;
+    doc["naptime_baseline"] = naptime_baseline;
 
     String output;
     serializeJson(doc, output);
@@ -389,13 +389,13 @@ void handle_get_sensor_status() {
     doc["bme280_available"] = bme280_available;
     doc["gps_available"] = gps_available;
     doc["gps_awake"] = gps_awake;
+    doc["battery_reader_available"] = param_battery_reader_present.value();
+    doc["rssi"] = rssi;
+    doc["battery_level"] = battery_level;
     doc["is_reading_gps"] = is_reading_gps;
     doc["is_reading_sensors"] = is_reading_sensors;
-    doc["rssi"] = rssi;
-    doc["battery_reader_present"] = param_battery_reader_present.value();
-    doc["battery_level"] = battery_level;
     doc["naptime_enabled"] = naptime_enabled;
-    doc["baseline_naptime"] = baseline_naptime;
+    doc["naptime_baseline"] = naptime_baseline;
 
     String output;
     serializeJson(doc, output);
@@ -447,13 +447,13 @@ void handle_naptime() {
         
         // Update the global variable if the value is valid (i.e., greater than zero)
         else if (newNaptime > 0) {
-            baseline_naptime = newNaptime;
+            naptime_baseline = newNaptime;
             param_naptime_baseline.value() = newNaptime; // CLARIFY: Does this value persist?
 
             naptime_enabled = true;
 
             // Respond to the client indicating the updated naptime value
-            web_server.send(200, "text/plain", "Naptime updated to " + String(baseline_naptime) + " milliseconds.");
+            web_server.send(200, "text/plain", "Naptime updated to " + String(naptime_baseline) + " milliseconds.");
             return;
         }
     }
@@ -476,8 +476,8 @@ void handle_bedtime() {
         }
     }
 
-    // If param_gps_pwrctl_io_pin_present is True, shut down GPS
-    if (param_gps_pwrctl_io_pin_present.value()) {
+    // If param_gps_pwrctl_pin_present is True, shut down GPS
+    if (param_gps_pwrctl_pin_present.value()) {
         shutdown_gps();
     }
 
@@ -534,7 +534,7 @@ void handle_snapshot()
   log_i("Snapshot took %u milliseconds", elapsedTime);
 
   // Calculate the sleep duration
-  int sleepDuration = baseline_naptime - elapsedTime - DEFAULT_NAPTIME_BUFFER;  // Subtract 25ms buffer
+  int sleepDuration = naptime_baseline - elapsedTime - DEFAULT_NAPTIME_BUFFER;  // Subtract 25ms buffer
 
   // Log the calculated sleep duration
   log_i("Sleep duration: %d milliseconds", sleepDuration);
@@ -595,7 +595,7 @@ void handle_update_GPS()
     web_server.send(404, "text/plain", "GPS is not present.");
     return;
   }
-  // if (!param_gps_pwrctl_io_pin_present.value()) {
+  // if (!param_gps_pwrctl_pin_present.value()) {
   //   web_server.send(404, "text/plain", "GPS power control is not present. Just call /sensors instead.");
   //   return;
   // }
@@ -698,14 +698,14 @@ void update_sensor_values_task(void* parameter) {
       }
 
       // Ask for a patient gps reading if requested and not power-controlled
-      if (param_gps_present.value()&& (!param_gps_pwrctl_io_pin_present.value() && gps_patient_read_requested)) {
+      if (param_gps_present.value()&& (!param_gps_pwrctl_pin_present.value() && gps_patient_read_requested)) {
         log_v("Task 2: Patiently reading GPS and updating");
         patient_single_reading_gps(DEFAULT_GPS_PATIENT_WAIT);
         gps_patient_read_requested = false;
       }
 
       // Conditionally wake up GPS and update, if power-controlled and /update_GPS has been called
-      if (param_gps_present.value()&& (param_gps_pwrctl_io_pin_present.value() && gps_patient_read_requested)) {
+      if (param_gps_present.value()&& (param_gps_pwrctl_pin_present.value() && gps_patient_read_requested)) {
         log_v("Task 2: Waking up GPS for patient read and updating");
         wakeup_single_reading_gps();
         gps_patient_read_requested = false;
@@ -731,7 +731,7 @@ void update_bme280() {
 
 void update_battery() {
     // Battery
-    battery_level = read_battery_voltage(param_battery_reader_io_pin.value());
+    battery_level = read_battery_voltage(param_battery_reader_pin.value());
 }
 
 void update_gps() {
@@ -784,9 +784,9 @@ void update_gps() {
 
 // Function to shut down the GPS by turning off its power supply using the NPN transistor.
 void shutdown_gps() {
-    if (param_gps_pwrctl_io_pin_present.value()) {
-        Serial.println("Shutting down GPS with pin: " + String(param_gps_pwrctl_io_pin.value()));
-        digitalWrite(param_gps_pwrctl_io_pin.value(), LOW); // Turn off the NPN transistor
+    if (param_gps_pwrctl_pin_present.value()) {
+        Serial.println("Shutting down GPS with pin: " + String(param_gps_pwrctl_pin.value()));
+        digitalWrite(param_gps_pwrctl_pin.value(), LOW); // Turn off the NPN transistor
         Serial.println("GPS has been shut down.");
     } else {
         Serial.println("GPS power management not available.");
@@ -796,8 +796,8 @@ void shutdown_gps() {
 
 // Function to wake up the GPS by turning on its power supply.
 void wakeup_gps() {
-    if (param_gps_pwrctl_io_pin_present.value()) {
-        digitalWrite(param_gps_pwrctl_io_pin.value(), HIGH); // Turn on the NPN transistor
+    if (param_gps_pwrctl_pin_present.value()) {
+        digitalWrite(param_gps_pwrctl_pin.value(), HIGH); // Turn on the NPN transistor
         Serial.println("GPS is waking up...");
         delay(2000); // A brief delay to allow the GPS some initial setup time. 
     } else {
@@ -902,14 +902,14 @@ void sensor_setup() {
   // If power-controlled, turn off GPS after initial read, and set gps_awake to false.
   if (param_gps_present.value()) {
       log_v("GPS present, initializing...");
-      log_v("DRX pin: %d", param_gps_drx.value());
-      log_v("DTX pin: %d", param_gps_dtx.value());
-      myGPS.init(param_gps_drx.value(), param_gps_dtx.value());
+      log_v("DRX pin: %d", param_gps_rx.value());
+      log_v("DTX pin: %d", param_gps_tx.value());
+      myGPS.init(param_gps_rx.value(), param_gps_tx.value());
       if (myGPS.setup()) {  // Check if GPS initialization succeeded
           log_v("GPS initialized successfully.");
           gps_available = true;
           update_gps(); // Attempt to get initial GPS fix. Skips if not available.
-          if (param_gps_pwrctl_io_pin_present.value() >> 0) {
+          if (param_gps_pwrctl_pin_present.value() >> 0) {
               shutdown_gps();
           } else {
               gps_awake = true;
@@ -927,7 +927,7 @@ void sensor_setup() {
 
   if (param_battery_reader_present.value()) {
     log_i("Battery level monitor is present.");
-    log_i("Assigned I/O pin: %d", param_battery_reader_io_pin.value());
+    log_i("Assigned I/O pin: %d", param_battery_reader_pin.value());
   } else {
     log_i("Battery level monitor is not present.");
   }
@@ -1111,15 +1111,15 @@ void setup() {
 
   // Battery Reader group items
   param_group_battery_reader.addItem(&param_battery_reader_present);
-  param_group_battery_reader.addItem(&param_battery_reader_io_pin);
+  param_group_battery_reader.addItem(&param_battery_reader_pin);
   iotWebConf.addParameterGroup(&param_group_battery_reader);
 
   // GPS group items
   param_group_gps.addItem(&param_gps_present);
-  param_group_gps.addItem(&param_gps_drx);
-  param_group_gps.addItem(&param_gps_dtx);
-  param_group_gps.addItem(&param_gps_pwrctl_io_pin_present);
-  param_group_gps.addItem(&param_gps_pwrctl_io_pin);
+  param_group_gps.addItem(&param_gps_rx);
+  param_group_gps.addItem(&param_gps_tx);
+  param_group_gps.addItem(&param_gps_pwrctl_pin_present);
+  param_group_gps.addItem(&param_gps_pwrctl_pin);
   iotWebConf.addParameterGroup(&param_group_gps);
 
   // Bedtime group items
@@ -1137,8 +1137,8 @@ void setup() {
   iotWebConf.init();
 
   // Make this conditional on gps being present AND gps pwr ctl pin being present
-  if (param_gps_present.value() && param_gps_pwrctl_io_pin_present.value()) {
-      pinMode(param_gps_pwrctl_io_pin.value(), OUTPUT);
+  if (param_gps_present.value() && param_gps_pwrctl_pin_present.value()) {
+      pinMode(param_gps_pwrctl_pin.value(), OUTPUT);
   }
 
   camera_init_result = initialize_camera();
