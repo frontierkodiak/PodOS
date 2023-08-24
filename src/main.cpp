@@ -324,6 +324,9 @@ void handle_get_config() {
     // Create a JSON object
     DynamicJsonDocument doc(4096); // 4KB might be necessary due to the number of variables. Adjust if needed.
 
+    doc["pod_name"] = iotWebConf.getThingName();
+    doc["firmware_name"] = APP_TITLE;
+    doc["firmware_version"] = APP_VERSION;
     doc["param_frame_duration"] = param_frame_duration.value();
     doc["param_frame_size"] = param_frame_size.value();
     doc["param_jpg_quality"] = param_jpg_quality.value();
