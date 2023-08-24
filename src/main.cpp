@@ -357,9 +357,9 @@ void handle_get_config() {
     doc["bme280_sda_pin"] = param_bme280_sda_pin.value();
     doc["battery_reader_pin"] = param_battery_reader_pin.value();
     doc["gps_present"] = param_gps_present.value();
-    doc["gps_rx"] = param_gps_rx.value();
-    doc["gps_tx"] = param_gps_tx.value();
-    doc["gps_pwrctl_pin_present"] = param_gps_pwrctl_pin_present.value();
+    doc["gps_rx_pin"] = param_gps_rx.value();
+    doc["gps_tx_pin"] = param_gps_tx.value();
+    doc["gps_pwrctl_available"] = param_gps_pwrctl_pin_present.value();
     doc["gps_pwrctl_pin"] = param_gps_pwrctl_pin.value();
     doc["battery_reader_available"] = param_battery_reader_present.value();
     doc["bedtime_max_wait"] = param_bedtime_max_wait.value();
